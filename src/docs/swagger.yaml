@@ -1,0 +1,675 @@
+openapi: 3.0.0
+
+info:
+  title: Hotel Booking API
+  version: 1.0.0
+  description: API de gestão de reservas de hotel (Pedro Cavudissa)
+
+servers:
+  - url: http://localhost:3000
+
+tags:
+  - name: Authentication
+  - name: Users
+  - name: Rooms
+  - name: Amenities
+  - name: Reservations
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  # =========================
+  # AUTH
+  # =========================
+
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Registar utilizador
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        201:
+          description: Utilizador criado
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        200:
+          description: Login OK
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Logout do utilizador
+      responses:
+        200:
+          description: Logout OK
+
+  /auth/verify-email:
+    get:
+      tags: [Authentication]
+      summary: Verificar email
+      security: []
+      parameters:
+        - in: query
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Email verificado
+
+  /auth/change-password:
+    post:
+      tags: [Authentication]
+      summary: Alterar password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string }
+      responses:
+        200:
+          description: Password alterada
+
+  /auth/forgot-password:
+    post:
+      tags: [Authentication]
+      summary: Recuperar password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        200:
+          description: Email enviado
+
+  /auth/reset-password/confirm:
+    get:
+      tags: [Authentication]
+      summary: Página reset password
+      security: []
+      parameters:
+        - in: query
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: HTML page
+    post:
+      tags: [Authentication]
+      summary: Confirmar reset password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string }
+      responses:
+        200:
+          description: Password redefinida
+
+  /auth/resend-verification:
+    post:
+      tags: [Authentication]
+      summary: Reenviar verificação
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        200:
+          description: Email reenviado
+
+  /auth/resend-reset-password:
+    post:
+      tags: [Authentication]
+      summary: Reenviar reset password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        200:
+          description: Reset reenviado
+
+  /auth/disable/{id}:
+    patch:
+      tags: [Authentication]
+      summary: Desativar utilizador
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Conta desativada
+
+  /auth/activate/{id}:
+    patch:
+      tags: [Authentication]
+      summary: Ativar utilizador
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Conta ativada
+
+  # =========================
+  # USERS
+  # =========================
+
+  /users:
+    get:
+      tags: [Users]
+      summary: Listar utilizadores
+      responses:
+        200:
+          description: Lista
+
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Utilizador atual
+      responses:
+        200:
+          description: OK
+
+  /users/{id}:
+    get:
+      tags: [Users]
+      summary: Buscar utilizador
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: OK
+    delete:
+      tags: [Users]
+      summary: Apagar utilizador
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Apagado
+
+  # =========================
+  # ROOMS
+  # =========================
+
+  /rooms:
+    get:
+      tags: [Rooms]
+      summary: Listar quartos
+      description: Retorna uma lista de quartos, permitindo filtrar pelo tipo de quarto.
+      parameters:
+        - in: query
+          name: type
+          required: false
+          description: Filtrar os quartos por uma categoria específica
+          schema:
+            type: string
+            enum: [SINGLE, DOUBLE, SUITE, DELUXE, PRESIDENTIAL]
+      responses:
+        200:
+          description: Lista de quartos retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    number:
+                      type: string
+                    type:
+                      type: string
+                    pricePerNight:
+                      type: number
+    post:
+      tags: [Rooms]
+      summary: Criar quarto com imagem
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [number, type, title, pricePerNight, capacity]
+              properties:
+                number:
+                  type: string
+                type:
+                  type: string
+                  enum: [SINGLE, DOUBLE, SUITE, DELUXE, PRESIDENTIAL]
+                title:
+                  type: string
+                description:
+                  type: string
+                pricePerNight:
+                  type: number
+                capacity:
+                  type: integer
+                floor:
+                  type: integer
+                image:
+                  type: string
+                  format: binary
+                amenityIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        201:
+          description: Quarto criado com sucesso
+
+  /rooms/{id}:
+    delete:
+      tags: [Rooms]
+      summary: Eliminar quarto
+      description: Elimina um quarto do sistema. Rota protegida (Apenas ADMIN).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Quarto eliminado com sucesso
+        401:
+          description: Não autenticado
+        403:
+          description: Não autorizado (Apenas ADMIN)
+        404:
+          description: Quarto não encontrado
+
+  # =========================
+  # ROOMS - CLEANING / INSPECTION / MAINTENANCE
+  # =========================
+
+  /rooms/{id}/cleaning/start:
+    patch:
+      tags: [Rooms]
+      summary: Iniciar limpeza
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Limpeza iniciada
+
+  /rooms/{id}/cleaning/finish:
+    patch:
+      tags: [Rooms]
+      summary: Finalizar limpeza
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Limpeza finalizada
+
+  /rooms/{id}/inspect:
+    patch:
+      tags: [Rooms]
+      summary: Marcar quarto como inspecionado
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Quarto inspecionado
+
+  /rooms/{id}/maintenance/start:
+    patch:
+      tags: [Rooms]
+      summary: Iniciar manutenção (OOO ou OOS)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                  enum: [OUT_OF_ORDER, OUT_OF_SERVICE]
+      responses:
+        200:
+          description: Manutenção iniciada
+
+  /rooms/{id}/maintenance/finish:
+    patch:
+      tags: [Rooms]
+      summary: Finalizar manutenção
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Manutenção finalizada
+
+  # =========================
+  # AMENITIES
+  # =========================
+
+  /amenities:
+    get:
+      tags: [Amenities]
+      summary: Listar amenities
+      responses:
+        200:
+          description: OK
+    post:
+      tags: [Amenities]
+      summary: Criar amenity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        201:
+          description: Criado
+
+  /amenities/{id}:
+    patch:
+      tags: [Amenities]
+      summary: Atualizar amenity
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        200:
+          description: Atualizado
+    delete:
+      tags: [Amenities]
+      summary: Eliminar amenity
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Removido
+
+  # =========================
+  # RESERVATIONS
+  # =========================
+
+  /reservations:
+    get:
+      tags: [Reservations]
+      summary: Listar reservas
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: OK
+
+    post:
+      tags: [Reservations]
+      summary: Criar reserva (HOLD de pagamento 15min)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, roomId, checkIn, checkOut]
+              properties:
+                userId:
+                  type: string
+                roomId:
+                  type: string
+                checkIn:
+                  type: string
+                  format: date-time
+                checkOut:
+                  type: string
+                  format: date-time
+                totalPrice:
+                  type: number
+      responses:
+        201:
+          description: Reserva criada
+
+  /reservations/{id}:
+    get:
+      tags: [Reservations]
+      summary: Buscar reserva por ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+
+    put:
+      tags: [Reservations]
+      summary: Atualizar reserva
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                checkIn:
+                  type: string
+                  format: date-time
+                checkOut:
+                  type: string
+                  format: date-time
+                status:
+                  type: string
+      responses:
+        200:
+          description: Atualizado
+
+    delete:
+      tags: [Reservations]
+      summary: Cancelar reserva
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Cancelado
+
+  /reservations/{id}/pay:
+    patch:
+      tags: [Reservations]
+      summary: Confirmar pagamento (recepção)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method]
+              properties:
+                method:
+                  type: string
+                  enum: [CASH, CARD, TRANSFER]
+      responses:
+        200:
+          description: Pagamento confirmado
+
+  /reservations/{id}/checkin:
+    patch:
+      tags: [Reservations]
+      summary: Fazer check-in do cliente
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Check-in realizado com sucesso
+
+  /reservations/{id}/checkout:
+    patch:
+      tags: [Reservations]
+      summary: Fazer check-out do cliente
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Check-out realizado com sucesso

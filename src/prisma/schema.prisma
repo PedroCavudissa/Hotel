@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+enum Role {
+  ADMIN
+  RECEPTION
+  CLIENT
+}
+
+enum RoomType {
+  SINGLE
+  DOUBLE
+  SUITE
+  DELUXE
+  PRESIDENTIAL
+}
+
+enum RoomState {
+  VACANT_CLEAN
+  VACANT_DIRTY
+  OCCUPIED
+  CLEANING
+  MAINTENANCE
+}
+
+enum MaintenanceState {
+  NONE
+  OUT_OF_ORDER   // OOO (bloqueio total)
+  OUT_OF_SERVICE // OOS (bloqueio parcial)
+}
+
+enum InspectionState {
+  NOT_INSPECTED
+  INSPECTED
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  password      String
+  role          Role     @default(CLIENT)
+
+  emailVerified Boolean  @default(false)
+  isActive      Boolean  @default(true)
+
+  resetToken    String?
+  resetExpires  DateTime?
+
+  tokenVersion  Int      @default(0)
+
+  createdAt     DateTime @default(now())
+
+  reservations  Reservation[]
+}
+
+model Room {
+  id              String @id @default(uuid())
+
+  number          String @unique
+  type            RoomType
+
+  title           String
+  description     String?
+
+  pricePerNight   Float
+  capacity        Int
+  floor           Int?
+
+  imageUrl        String?
+
+  // ESTADOS PROFISSIONAIS
+  state           RoomState @default(VACANT_CLEAN)
+  maintenance     MaintenanceState @default(NONE)
+  inspection      InspectionState @default(NOT_INSPECTED)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  amenities       Amenity[]
+  reservations    Reservation[]
+}
+
+model Reservation {
+  id            String @id @default(uuid())
+
+  userId        String
+  roomId        String
+
+  user          User @relation(fields: [userId], references: [id])
+  room          Room @relation(fields: [roomId], references: [id])
+
+  checkIn       DateTime
+  checkOut      DateTime
+
+  totalPrice    Float
+
+  status        ReservationStatus @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  paymentMethod String?
+
+  // ⏱ HOLD DE RESERVA (15 min)
+  expiresAt     DateTime?
+
+  createdAt     DateTime @default(now())
+}
+
+
+model Amenity {
+  id        String @id @default(uuid())
+  name      String @unique
+
+  rooms     Room[]
+
+  createdAt DateTime @default(now())
+}
