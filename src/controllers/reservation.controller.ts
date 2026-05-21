@@ -57,13 +57,21 @@ export class ReservationController {
       return res.status(400).json({ error: err.message });
     }
   }
-  static async checkIn(req: Request, res: Response) {
-  const result = await ReservationService.checkIn(req.params.id as string);
-  return res.json(result);
-}
+    static async checkIn(req:Request, res:Response) {
+    try {
+      const result = await ReservationService.checkIn(req.params.id as string);
+      return res.json(result);
+    } catch (err) {
+      return  res.status(err.statusCode || 400).json({ error: err.message });
+    }
+  }
 
-static async checkOut(req: Request, res: Response) {
-  const result = await ReservationService.checkOut(req.params.id as string);
-  return res.json(result);
-}
+  static async checkOut(req: Request, res: Response) {
+    try {
+      const result = await ReservationService.checkOut(req.params.id as string);
+      return res.json(result);
+    } catch (err) {
+      return res.status(err.statusCode || 400).json({ error: err.message });
+    }
+  }
 }

@@ -114,7 +114,19 @@ model Reservation {
   checkIn       DateTime
   checkOut      DateTime
 
+  // 🧠 EXECUÇÃO REAL (CHECK-IN / CHECK-OUT REAL)
+  checkInReal   DateTime?
+  checkOutReal  DateTime?
+
   totalPrice    Float
+
+  // 💰 PAGAMENTO AO ENTRAR
+  amountPaid    Float?
+  refundAmount  Float?
+  extraCharge   Float?
+
+  // 🧠 MOTIVO DE SAÍDA ANTECIPADA
+  earlyCheckoutReason String?
 
   status        ReservationStatus @default(PENDING)
   paymentStatus PaymentStatus @default(PENDING)
@@ -126,7 +138,6 @@ model Reservation {
 
   createdAt     DateTime @default(now())
 }
-
 
 model Amenity {
   id        String @id @default(uuid())

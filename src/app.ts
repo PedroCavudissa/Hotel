@@ -29,4 +29,8 @@ app.use("/rooms", roomRoutes);
 app.use("/amenities", amenityRoutes);
 app.use("/uploads", express.static("src/uploads"));
 app.use("/reservations", reservationRoutes);
+
+app.get("/", (req, res) => {
+  res.send("Hotel Booking API Running 🚀");
+});
 export default app;

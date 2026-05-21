@@ -197,19 +197,25 @@ static async findAll() {
   // CONFIRM PAYMENT
   // =========================
 static async confirmPayment(id: string, method: string) {
+  const reservation = await prisma.reservation.findUnique({
+    where: { id }
+  });
+
+  if (!reservation) throw new Error("Reserva não encontrada");
+
   return prisma.reservation.update({
     where: { id },
     data: {
       paymentStatus: "PAID",
       status: "CONFIRMED",
       paymentMethod: method,
+
+      // 💰 IMPORTANTE: registar pagamento real
+      amountPaid: reservation.totalPrice
     },
   });
 }
 
-  // =========================
-  // EXPIRE RESERVATIONS (CRON)
-  // =========================
 static async expireOldReservations() {
   return prisma.reservation.updateMany({
     where: {
@@ -217,12 +223,11 @@ static async expireOldReservations() {
       expiresAt: { lt: new Date() },
     },
     data: {
-      paymentStatus: "REFUNDED",
+      paymentStatus: "CANCELLED",
       status: "EXPIRED",
     },
   });
 }
-
 static async checkIn(reservationId: string) {
   const now = new Date();
 
@@ -231,33 +236,33 @@ static async checkIn(reservationId: string) {
     include: { room: true }
   });
 
-if (!reservation) {
-  throw new AppError(" Reserva não encontrada no sistema", 404);
-}
+  if (!reservation) {
+    throw new AppError(" Reserva não encontrada no sistema", 404);
+  }
 
-// ❌ pagamento
-if (reservation.paymentStatus !== "PAID") {
-  throw new AppError(
-    "Check-in bloqueado: pagamento ainda não foi confirmado pela receção",
-    403
-  );
-}
+  // ❌ pagamento
+  if (reservation.paymentStatus !== "PAID") {
+    throw new AppError(
+      "Check-in bloqueado: pagamento ainda não foi confirmado pela receção",
+      403
+    );
+  }
 
-// ❌ expiração
-if (reservation.expiresAt && reservation.expiresAt < now) {
-  throw new AppError(
-    "Reserva expirada: o tempo de pagamento (15 min) terminou",
-    410
-  );
-}
+  // ❌ expiração
+  if (reservation.expiresAt && reservation.expiresAt < now) {
+    throw new AppError(
+      "Reserva expirada: o tempo de pagamento (15 min) terminou",
+      410
+    );
+  }
 
-// ❌ status
-if (reservation.status !== "CONFIRMED") {
-  throw new AppError(
-    "Reserva ainda não está confirmada para check-in",
-    409
-  );
-}
+  // ❌ status
+  if (reservation.status !== "CONFIRMED") {
+    throw new AppError(
+      "Reserva ainda não está confirmada para check-in",
+      409
+    );
+  }
 
   // ✔ atualiza estado do quarto
   await prisma.room.update({
@@ -271,12 +276,10 @@ if (reservation.status !== "CONFIRMED") {
   return prisma.reservation.update({
     where: { id: reservationId },
     data: {
-      checkInReal: new Date(), // opcional (se quiseres adicionar no schema)
-      status: "CONFIRMED"
+      checkInReal: now
     }
   });
 }
-
 static async checkOut(reservationId: string) {
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
@@ -305,6 +308,31 @@ static async checkOut(reservationId: string) {
     );
   }
 
+ 
+  const planned = reservation.checkOut.getTime();
+  const actual = now.getTime();
+
+  let refundAmount = 0;
+  let extraCharge = 0;
+
+  const totalHours =
+    (reservation.checkOut.getTime() - reservation.checkIn.getTime()) /
+    (1000 * 60 * 60);
+
+  const ratePerHour = reservation.totalPrice / totalHours;
+
+  // 🟡 EARLY CHECKOUT
+  if (actual < planned) {
+    const unusedHours = (planned - actual) / (1000 * 60 * 60);
+    refundAmount = unusedHours * ratePerHour;
+  }
+
+  // 🔴 LATE CHECKOUT
+  if (actual > planned) {
+    const extraHours = (actual - planned) / (1000 * 60 * 60);
+    extraCharge = extraHours * ratePerHour;
+  }
+
   // ✔ atualiza quarto para limpeza
   await prisma.room.update({
     where: { id: reservation.roomId },
@@ -319,7 +347,9 @@ static async checkOut(reservationId: string) {
     where: { id: reservationId },
     data: {
       status: "COMPLETED",
-      checkOutReal: now // (opcional, mas muito útil)
+      checkOutReal: now,
+      refundAmount,
+      extraCharge
     }
   });
 }
