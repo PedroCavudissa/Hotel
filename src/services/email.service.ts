@@ -1,6 +1,9 @@
 import nodemailer from "nodemailer";
 
 export class EmailService {
+  private static apiUrl = process.env.API_URL || "http://localhost:3000";
+  private static frontendUrl = process.env.FRONTEND_URL;
+
   private static transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -9,50 +12,40 @@ export class EmailService {
     },
   });
 
-  // 1. Enviar link para Ativação de Conta
   static async sendVerificationEmail(email: string, token: string) {
-    const link = `http://localhost:3000/auth/verify-email?token=${token}`;
+    const link = `${this.apiUrl}/auth/verify-email?token=${token}`;
 
     await this.transporter.sendMail({
       from: `"Hotel Booking" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: "Ativa a tua Conta - Hotel Booking",
+      subject: "Ativa a tua conta - Hotel Booking",
       html: `
         <div style="font-family: sans-serif; padding: 20px;">
           <h2>Obrigado por te registares!</h2>
-          <p>Clica no botão abaixo para ativar a tua conta e poderes fazer o login:</p>
-          <a href="${link}" style="background: #22c55e; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 15px 0;">Activar Minha Conta</a>
+          <p>Clica no botão abaixo para ativar a tua conta e poderes fazer login:</p>
+          <a href="${link}" style="background: #22c55e; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 15px 0;">Ativar a minha conta</a>
         </div>
       `,
     });
   }
 
-  // 2. Enviar link para Alterar a Senha (Forgot Password)
- static async sendResetPasswordEmail(email: string, token: string) {
+  static async sendResetPasswordEmail(email: string, token: string) {
+    const link = this.frontendUrl
+      ? `${this.frontendUrl}/reset-password?token=${token}`
+      : `${this.apiUrl}/auth/reset-password/confirm?token=${token}`;
 
-  const link = `${process.env.FRONTEND_URL}/reset-password?token=${token}`; // frontend route
-
-  await this.transporter.sendMail({
-    from: `"Hotel Booking" <${process.env.EMAIL_USER}>`,
-    to: email,
-    subject: "Recuperação de Password - Hotel Booking",
-    html: `
-      <div style="font-family: sans-serif; padding: 20px;">
-        <h2>Pedido de Nova Password</h2>
-        <p>Clica no botão abaixo para redefinir a tua password:</p>
-
-        <a href="${link}"
-           style="background: #3b82f6; color: white; padding: 10px 20px;
-                  text-decoration: none; border-radius: 5px;
-                  display: inline-block; margin: 15px 0;">
-          Definir Nova Password
-        </a>
-
-        <p style="color: #666; font-size: 12px;">
-          Este link expira em 15 minutos.
-        </p>
-      </div>
-    `,
-  });
-}
+    await this.transporter.sendMail({
+      from: `"Hotel Booking" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Recuperação de password - Hotel Booking",
+      html: `
+        <div style="font-family: sans-serif; padding: 20px;">
+          <h2>Pedido de nova password</h2>
+          <p>Clica no botão abaixo para redefinir a tua password:</p>
+          <a href="${link}" style="background: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 15px 0;">Definir nova password</a>
+          <p style="color: #666; font-size: 12px;">Este link expira em 15 minutos.</p>
+        </div>
+      `,
+    });
+  }
 }

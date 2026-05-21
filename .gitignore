@@ -1,4 +1,7 @@
 node_modules
+dist
+prisma.config.js
+swagger.js
 # Keep environment variables out of version control
 .env
 

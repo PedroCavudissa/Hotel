@@ -21,6 +21,16 @@ export class AuthController {
       return res.status(401).json({ error: error.message });
     }
   }
+
+  static async refresh(req: Request, res: Response) {
+    try {
+      const { refreshToken } = req.body;
+      const result = await AuthService.refreshSession(refreshToken);
+      return res.json(result);
+    } catch (error: any) {
+      return res.status(401).json({ error: error.message });
+    }
+  }
 static async logout(req: Request, res: Response) {
   try {
     const userId = (req as any).user?.id;

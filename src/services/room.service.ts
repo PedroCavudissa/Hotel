@@ -21,11 +21,12 @@ static async create(data: any) {
 
       pricePerNight: Number(data.pricePerNight),
       capacity: Number(data.capacity),
+      floor: data.floor ? Number(data.floor) : undefined,
       imageUrl: data.imageUrl,
 
-      amenities: data.amenities?.length
+      amenities: (data.amenityIds || data.amenities)?.length
         ? {
-            connect: data.amenities.map((id: string) => ({ id })),
+            connect: (data.amenityIds || data.amenities).map((id: string) => ({ id })),
           }
         : undefined,
     },
@@ -92,15 +93,18 @@ static async create(data: any) {
         type: data.type,
         title: data.title,
         description: data.description,
-        pricePerNight: data.pricePerNight,
-        capacity: data.capacity,
+        pricePerNight: data.pricePerNight ? Number(data.pricePerNight) : undefined,
+        capacity: data.capacity ? Number(data.capacity) : undefined,
+        floor: data.floor ? Number(data.floor) : undefined,
         imageUrl: data.imageUrl,
 
-        amenities: {
-          set: data.amenityIds?.map((id: string) => ({
-            id,
-          })),
-        },
+        amenities: data.amenityIds
+          ? {
+              set: data.amenityIds.map((id: string) => ({
+                id,
+              })),
+            }
+          : undefined,
       },
 
       include: {
@@ -128,7 +132,7 @@ static async create(data: any) {
     };
   }
 
-  static async changeStatus(id: string, status: any) {
+  static async changeStatus(id: string, state: any) {
 
     const room = await prisma.room.findUnique({
       where: { id },
@@ -142,7 +146,7 @@ static async create(data: any) {
       where: { id },
 
       data: {
-        status,
+        state,
       },
     });
   }

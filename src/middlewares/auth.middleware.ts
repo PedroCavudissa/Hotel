@@ -7,6 +7,7 @@ interface JwtPayload {
   email?: string;
   role?: string;
   tokenVersion?: number;
+  tokenType?: string;
 }
 
 export async function authMiddleware(
@@ -34,12 +35,20 @@ export async function authMiddleware(
       process.env.JWT_SECRET as string
     ) as JwtPayload;
 
+    if (decoded.tokenType && decoded.tokenType !== "access") {
+      return res.status(401).json({ message: "Tipo de token inválido para autenticação" });
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
     });
 
     if (!user) {
       return res.status(401).json({ message: "Utilizador não encontrado" });
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({ message: "Conta desativada" });
     }
 
     if (user.tokenVersion !== decoded.tokenVersion) {

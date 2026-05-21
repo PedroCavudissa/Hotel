@@ -68,7 +68,25 @@ paths:
                 password: { type: string }
       responses:
         200:
-          description: Login OK
+          description: Login OK. Retorna accessToken, refreshToken e token (alias do accessToken).
+
+  /auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Renovar sessão com refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        200:
+          description: Novo accessToken e novo refreshToken
 
   /auth/logout:
     post:
@@ -528,6 +546,7 @@ paths:
     post:
       tags: [Reservations]
       summary: Criar reserva (HOLD de pagamento 15min)
+      description: Clientes autenticados reservam para si mesmos. ADMIN/RECEPTION podem informar userId para reservas presenciais ou assistidas.
       security:
         - bearerAuth: []
       requestBody:
@@ -536,10 +555,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [userId, roomId, checkIn, checkOut]
+              required: [roomId, checkIn, checkOut]
               properties:
                 userId:
                   type: string
+                  description: Obrigatório apenas para ADMIN/RECEPTION quando a reserva é feita para outro cliente.
                 roomId:
                   type: string
                 checkIn:
@@ -548,11 +568,9 @@ paths:
                 checkOut:
                   type: string
                   format: date-time
-                totalPrice:
-                  type: number
       responses:
         201:
-          description: Reserva criada
+          description: Reserva criada em PENDING com paymentStatus PENDING e expiresAt de 15 minutos
 
   /reservations/{id}:
     get:
@@ -619,6 +637,7 @@ paths:
     patch:
       tags: [Reservations]
       summary: Confirmar pagamento (recepção)
+      description: Deve ser feito antes do expiresAt. Ao confirmar, a reserva passa para CONFIRMED e expiresAt fica null.
       security:
         - bearerAuth: []
       parameters:
@@ -662,6 +681,7 @@ paths:
     patch:
       tags: [Reservations]
       summary: Fazer check-out do cliente
+      description: Só é permitido depois do check-in. Se sair antes da data marcada, calcula refundAmount. Se sair depois, calcula extraCharge por hora arredondada para cima.
       security:
         - bearerAuth: []
       parameters:
@@ -670,6 +690,16 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Motivo quando o cliente faz checkout antecipado.
       responses:
         200:
           description: Check-out realizado com sucesso

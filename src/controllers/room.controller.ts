@@ -93,11 +93,11 @@ static async findAll(req: Request, res: Response) {
 
     try {
 
-      const { status } = req.body;
+      const state = req.body.state || req.body.status;
 
       const room = await RoomService.changeStatus(
         req.params.id as string,
-        status
+        state
       );
 
       return res.json(room);

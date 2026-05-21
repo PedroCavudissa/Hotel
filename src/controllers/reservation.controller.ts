@@ -5,25 +5,29 @@ export class ReservationController {
 
   static async create(req:Request, res:Response) {
     try {
-      const result = await ReservationService.create(req.body);
+      const result = await ReservationService.create(req.body, (req as any).user);
       return res.status(201).json(result);
     } catch (err: any) {
-      return res.status(400).json({ error: err.message });
+      return res.status(err.statusCode || 400).json({ error: err.message });
     }
   }
 
   static async findAll(req: Request, res: Response) {
-    const data = await ReservationService.findAll();
-    return res.json(data);
+    try {
+      const data = await ReservationService.findAll((req as any).user);
+      return res.json(data);
+    } catch (error: any) {
+      return res.status(error.statusCode || 400).json({ error: error.message });
+    }
   }
 
   static async findById(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
-      const data = await ReservationService.findById(id);
+      const data = await ReservationService.findById(id, (req as any).user);
       return res.json(data);
     } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+      return res.status(error.statusCode || 400).json({ error: error.message });
     }
   }
 
@@ -33,17 +37,17 @@ export class ReservationController {
       const data = await ReservationService.update(id, req.body);
       return res.json(data);
     } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+      return res.status(error.statusCode || 400).json({ error: error.message });
     }
   }
 
   static async delete(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
-      const data = await ReservationService.delete(id);
+      const data = await ReservationService.delete(id, (req as any).user);
       return res.json(data);
     } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+      return res.status(error.statusCode || 400).json({ error: error.message });
     }
   }
   static async confirmPayment(req:Request, res:Response) {
@@ -54,23 +58,26 @@ export class ReservationController {
       const result = await ReservationService.confirmPayment(id, method);
       return res.json(result);
     } catch (err: any) {
-      return res.status(400).json({ error: err.message });
+      return res.status(err.statusCode || 400).json({ error: err.message });
     }
   }
     static async checkIn(req:Request, res:Response) {
     try {
       const result = await ReservationService.checkIn(req.params.id as string);
       return res.json(result);
-    } catch (err) {
+    } catch (err: any) {
       return  res.status(err.statusCode || 400).json({ error: err.message });
     }
   }
 
   static async checkOut(req: Request, res: Response) {
     try {
-      const result = await ReservationService.checkOut(req.params.id as string);
+      const result = await ReservationService.checkOut(
+        req.params.id as string,
+        req.body?.reason
+      );
       return res.json(result);
-    } catch (err) {
+    } catch (err: any) {
       return res.status(err.statusCode || 400).json({ error: err.message });
     }
   }
