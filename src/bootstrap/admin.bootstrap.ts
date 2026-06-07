@@ -2,17 +2,18 @@ import { prisma } from "../prisma/client.js";
 import bcrypt from "bcrypt";
 export async function createDefaultAdmin() {
     const adminEmail = "admin@system.com";
-    const recepcaoEmail= "recepcao@system.com";
+    const recepcaoEmail = "recepcao@system.com";
 
-    
-    const recepcaoExists= await prisma.user.findUnique(
-        {where: { email:recepcaoEmail},
-    });
-    if(recepcaoExists){
+
+    const recepcaoExists = await prisma.user.findUnique(
+        {
+            where: { email: recepcaoEmail },
+        });
+    if (recepcaoExists) {
         console.log("recepcionista já existe");
         return;
     }
-      const hashedPasswordR = await bcrypt.hash("recepcao123", 10);
+    const hashedPasswordR = await bcrypt.hash("recepcao123", 10);
     await prisma.user.create({
         data: {
             name: "Recepcionista",
@@ -22,7 +23,7 @@ export async function createDefaultAdmin() {
             emailVerified: true,
         },
     });
-    console.log("🔥 Recepcionista Criado com sucesso criado automaticamente");
+    console.log(" Recepcionista Criado com sucesso criado automaticamente");
 
     const adminExists = await prisma.user.findUnique({
         where: { email: adminEmail },
@@ -41,7 +42,7 @@ export async function createDefaultAdmin() {
             emailVerified: true,
         },
     });
-    console.log("🔥 Admin criado automaticamente");
-    
+    console.log(" Admin criado automaticamente");
+
 
 }

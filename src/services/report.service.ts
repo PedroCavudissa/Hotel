@@ -66,4 +66,6 @@ export class ReportService {
       predictedRevenue: predictedRevenue._sum.totalPrice ?? 0,
     };
   }
+
+  
 }

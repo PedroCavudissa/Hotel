@@ -12,4 +12,11 @@ router.get(
   ReportController.occupancy
 );
 
+router.get(
+  "/financial",
+  authMiddleware,
+  roleMiddleware(["ADMIN", "MANAGER"]),
+  ReportController.financial
+);
+
 export default router;

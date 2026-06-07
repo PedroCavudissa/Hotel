@@ -6,6 +6,7 @@ import { upload } from "../middlewares/upload.middleware.js";
 
 const reservationRoutes = Router();
 const staffRoles = ["ADMIN", "MANAGER", "RECEPTION"];
+const clientRoles = ["CLIENT", "ADMIN", "MANAGER", "RECEPTION"];
 
 reservationRoutes.post("/", authMiddleware, ReservationController.create);
 reservationRoutes.get("/mine", authMiddleware, ReservationController.mine);
@@ -35,21 +36,21 @@ reservationRoutes.put(
 reservationRoutes.patch(
   "/:id/reschedule",
   authMiddleware,
-  roleMiddleware(staffRoles),
+  roleMiddleware(clientRoles),
   ReservationController.reschedule
 );
 
 reservationRoutes.patch(
   "/:id/change-room",
   authMiddleware,
-  roleMiddleware(staffRoles),
+  roleMiddleware(clientRoles),
   ReservationController.changeRoom
 );
 
 reservationRoutes.patch(
   "/:id/cancel",
   authMiddleware,
-  roleMiddleware(staffRoles),
+  roleMiddleware(clientRoles),
   ReservationController.cancel
 );
 

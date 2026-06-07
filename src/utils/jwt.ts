@@ -4,6 +4,6 @@ const secret = process.env.JWT_SECRET as string;
 
 export function generateToken(payload: Record<string, any>) {
   return jwt.sign(payload, process.env.JWT_SECRET as string, {
-    expiresIn: "1h",
+    expiresIn: "2h",
   });
 }

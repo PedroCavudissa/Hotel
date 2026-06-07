@@ -57,18 +57,7 @@ enum PaymentStatus {
   REFUNDED
 }
 
-enum TicketType {
-  COMPLAINT
-  RESERVATION_CHANGE
-  OTHER
-}
 
-enum TicketStatus {
-  OPEN
-  IN_REVIEW
-  RESOLVED
-  REJECTED
-}
 
 model User {
   id              String   @id @default(uuid())
@@ -96,6 +85,7 @@ model User {
 
   reservations        Reservation[]
   guestProfile        Guest?
+  ticketMessages  TicketMessage[]
   createdGuests       Guest[] @relation("GuestCreatedBy")
   createdReservations Reservation[] @relation("ReservationCreatedBy")
   tickets             Ticket[] @relation("TicketUser")

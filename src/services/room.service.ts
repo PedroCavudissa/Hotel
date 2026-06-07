@@ -2,83 +2,83 @@ import { prisma } from "../prisma/client.js";
 
 export class RoomService {
 
-static async create(data: any) {
+  static async create(data: any) {
 
-  const exists = await prisma.room.findUnique({
-    where: { number: data.number },
-  });
+    const exists = await prisma.room.findUnique({
+      where: { number: data.number },
+    });
 
-  if (exists) {
-    throw new Error("Já existe um quarto com este número");
-  }
+    if (exists) {
+      throw new Error("Já existe um quarto com este número");
+    }
 
-  const room = await prisma.room.create({
-    data: {
-      number: data.number,
-      type: data.type,
-      title: data.title,
-      description: data.description,
+    const room = await prisma.room.create({
+      data: {
+        number: data.number,
+        type: data.type,
+        title: data.title,
+        description: data.description,
 
-      pricePerNight: Number(data.pricePerNight),
-      capacity: Number(data.capacity),
-      floor: data.floor ? Number(data.floor) : undefined,
-      imageUrl: data.imageUrl,
+        pricePerNight: Number(data.pricePerNight),
+        capacity: Number(data.capacity),
+        floor: data.floor ? Number(data.floor) : undefined,
+        imageUrl: data.imageUrl,
 
-      amenities: data.amenities?.length
-        ? {
+        amenities: data.amenities?.length
+          ? {
             connect: data.amenities.map((id: string) => ({ id })),
           }
-        : undefined,
-    },
-
-    include: {
-      amenities: true,
-    },
-  });
-
-  return room;
-}
-
- static async findAll(filters?: any) {
-  const { type, state, availability } = filters || {};
-  const now = new Date();
-  const where: any = {};
-
-  if (type && type !== "all") where.type = type;
-  if (state && state !== "all") where.state = state;
-  if (availability === "free") {
-    where.state = "VACANT_CLEAN";
-    where.maintenance = "NONE";
-    where.reservations = {
-      none: {
-        status: { in: ["PENDING", "CONFIRMED"] },
-        checkIn: { lt: now },
-        checkOut: { gt: now },
+          : undefined,
       },
-    };
-  }
-  if (availability === "occupied") where.state = "OCCUPIED";
-  if (availability === "reserved") {
-    where.reservations = {
-      some: {
-        status: { in: ["PENDING", "CONFIRMED"] },
-        checkOut: { gt: now },
+
+      include: {
+        amenities: true,
       },
-    };
+    });
+
+    return room;
   }
 
-  return prisma.room.findMany({
-    where,
+  static async findAll(filters?: any) {
+    const { type, state, availability } = filters || {};
+    const now = new Date();
+    const where: any = {};
 
-    include: {
-      amenities: true,
-    },
+    if (type && type !== "all") where.type = type;
+    if (state && state !== "all") where.state = state;
+    if (availability === "free") {
+      where.state = "VACANT_CLEAN";
+      where.maintenance = "NONE";
+      where.reservations = {
+        none: {
+          status: { in: ["PENDING", "CONFIRMED"] },
+          checkIn: { lt: now },
+          checkOut: { gt: now },
+        },
+      };
+    }
+    if (availability === "occupied") where.state = "OCCUPIED";
+    if (availability === "reserved") {
+      where.reservations = {
+        some: {
+          status: { in: ["PENDING", "CONFIRMED"] },
+          checkOut: { gt: now },
+        },
+      };
+    }
 
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
-}
+    return prisma.room.findMany({
+      where,
+
+      include: {
+        amenities: true,
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+  }
 
   static async findById(id: string) {
 
@@ -181,7 +181,7 @@ static async create(data: any) {
     });
   }
 
-   // 🔥 INICIAR LIMPEZA
+  // INICIAR LIMPEZA
   static async startCleaning(roomId: string) {
     const room = await prisma.room.findUnique({
       where: { id: roomId },
@@ -204,7 +204,7 @@ static async create(data: any) {
     });
   }
 
-  // 🔥 FINALIZAR LIMPEZA
+  // FINALIZAR LIMPEZA
   static async finishCleaning(roomId: string) {
     const room = await prisma.room.findUnique({
       where: { id: roomId },
@@ -226,7 +226,7 @@ static async create(data: any) {
     });
   }
 
-  // 🔥 INSPEÇÃO DA SUPERVISORA
+  // Inspecionar Quarto (Marcar como INSPECTED para permitir reservas)
   static async inspect(roomId: string) {
     const room = await prisma.room.findUnique({
       where: { id: roomId },
@@ -249,7 +249,7 @@ static async create(data: any) {
   }
 
 
-  // 🔥 START MAINTENANCE
+  // Iniciar Manutenção (OUT_OF_ORDER ou OUT_OF_SERVICE)
   static async startMaintenance(
     roomId: string,
     type: "OUT_OF_ORDER" | "OUT_OF_SERVICE"
@@ -267,7 +267,7 @@ static async create(data: any) {
     });
   }
 
-  // 🔥 FINISH MAINTENANCE
+  // Finalizar Manutenção (Voltar para VACANT_DIRTY)
   static async finishMaintenance(roomId: string) {
     const room = await prisma.room.findUnique({ where: { id: roomId } });
 

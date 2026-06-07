@@ -64,7 +64,7 @@ export class AmenityController {
     try {
 
       const result = await AmenityService.delete(
-         req.params.id as string,
+        req.params.id as string,
       );
 
       return res.json(result);

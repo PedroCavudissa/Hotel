@@ -5,7 +5,7 @@ import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 
 const router = Router();
 
-// --- Rotas Públicas de Fluxo Padrão ---
+//  Rotas Públicas de Fluxo Padrão 
 router.post("/register", AuthController.register);
 router.post("/login", AuthController.login);
 router.post(
@@ -15,18 +15,18 @@ router.post(
 );
 router.get("/verify-email", AuthController.verifyEmail);
 
-// --- Fluxo de Recuperação de Senha (Sem Estar Logado) ---
-router.post("/forgot-password", AuthController.forgot); // 1. Pede o reset (envia e-mail)
-router.get("/reset-password/confirm", AuthController.renderResetPage); // 2. O link do e-mail abre este HTML no navegador
-router.post("/reset-password/confirm", AuthController.reset); // 3. O formulário HTML faz POST para atualizar a senha
+//  Fluxo de Recuperação de Senha (Sem Estar Logado) 
+router.post("/forgot-password", AuthController.forgot); 
+router.get("/reset-password/confirm", AuthController.renderResetPage); 
+router.post("/reset-password/confirm", AuthController.reset); 
 
-// --- Rotas de Reenvio Distintas ---
+//Rotas de Reenvio Distintas 
 router.post("/resend-verification", AuthController.resendVerification);
 router.post("/resend-reset-password", AuthController.resendReset);
-// --- Rotas Autenticadas (Qualquer Utilizador Logado) ---
+//Rotas Autenticadas (Qualquer Utilizador Logado)
 router.post("/change-password", authMiddleware, AuthController.changePassword);
 
-// --- Rotas de Administração Exclusivas (Exige Permissão: ADMIN) ---
+//Rotas de Administração (Restritas a ADMIN)
 router.post(
   "/staff",
   authMiddleware,

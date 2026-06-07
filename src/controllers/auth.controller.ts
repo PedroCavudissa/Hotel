@@ -21,21 +21,21 @@ export class AuthController {
       return res.status(401).json({ error: error.message });
     }
   }
-static async logout(req: Request, res: Response) {
-  try {
-    const userId = (req as any).user?.id;
+  static async logout(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
 
-    if (!userId) {
-      return res.status(401).json({ error: "Não autenticado" });
+      if (!userId) {
+        return res.status(401).json({ error: "Não autenticado" });
+      }
+
+      const result = await AuthService.logout(userId);
+
+      return res.json(result);
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
     }
-
-    const result = await AuthService.logout(userId);
-
-    return res.json(result);
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
   }
-}
 
   static async createStaff(req: Request, res: Response) {
     try {
@@ -47,7 +47,7 @@ static async logout(req: Request, res: Response) {
     }
   }
 
-static async verifyEmail(req: Request, res: Response) {
+  static async verifyEmail(req: Request, res: Response) {
     try {
       const { token } = req.query;
       if (!token) return res.status(400).send("Token em falta");
@@ -95,7 +95,7 @@ static async verifyEmail(req: Request, res: Response) {
     }
   }
 
-static async forgot(req: Request, res: Response) {
+  static async forgot(req: Request, res: Response) {
     try {
       const { email } = req.body;
       const result = await AuthService.forgotPassword(email);
@@ -105,14 +105,14 @@ static async forgot(req: Request, res: Response) {
     }
   }
 
-static async reset(req: Request, res: Response) {
+  static async reset(req: Request, res: Response) {
     try {
       // Aceita tanto via formulário URL encoded quanto via JSON do Swagger/Postman
       const token = req.body.token || req.query.token;
       const password = req.body.password;
 
       await AuthService.resetPassword(token, password);
-      
+
       return res.send(`
         <div style="font-family: sans-serif; text-align: center; padding: 50px;">
           <h2 style="color: #22c55e;">Password alterada com sucesso! 🎉</h2>
@@ -164,7 +164,7 @@ static async reset(req: Request, res: Response) {
 
   static async disable(req: Request, res: Response) {
     try {
-     const id = req.params.id as string;
+      const id = req.params.id as string;
       const result = await AuthService.setUserStatus(id, false);
       return res.json(result);
     } catch (error: any) {
@@ -174,7 +174,7 @@ static async reset(req: Request, res: Response) {
 
   static async activate(req: Request, res: Response) {
     try {
-    const id = req.params.id as string;
+      const id = req.params.id as string;
       const result = await AuthService.setUserStatus(id, true);
       return res.json(result);
     } catch (error: any) {

@@ -55,8 +55,11 @@ export class ReservationController {
 
   static async reschedule(req: Request, res: Response) {
     try {
-      const data = await ReservationService.reschedule(req.params.id as string, req.body);
-      return res.json(data);
+      const { id } = req.params;
+      const { checkIn, checkOut, reason } = req.body;
+      
+      const reservation = await ReservationService.reschedule(id, { checkIn, checkOut, reason });
+      return res.json(reservation);
     } catch (err: any) {
       return sendError(res, err);
     }
@@ -74,17 +77,22 @@ export class ReservationController {
     }
   }
 
-  static async cancel(req: Request, res: Response) {
+static async cancel(req: Request, res: Response) {
     try {
-      const data = await ReservationService.cancel(
-        req.params.id as string,
-        req.body.reason
-      );
-      return res.json(data);
+      const { id } = req.params;
+      const { reason } = req.body;
+      
+      if (!reason) {
+        return res.status(400).json({ message: "Motivo do cancelamento é obrigatório" });
+      }
+      
+      const reservation = await ReservationService.cancel(id, reason);
+      return res.json(reservation);
     } catch (err: any) {
       return sendError(res, err);
     }
   }
+
 
   static async delete(req: Request, res: Response) {
     try {
@@ -134,11 +142,14 @@ export class ReservationController {
     }
   }
 
-  static async checkOut(req: Request, res: Response) {
+static async checkOut(req: Request, res: Response) {
     try {
+   
+      const { earlyCheckoutReason } = req.body || {};
+
       const result = await ReservationService.checkOut(
         req.params.id as string,
-        req.body.earlyCheckoutReason
+        earlyCheckoutReason
       );
       return res.json(result);
     } catch (err: any) {

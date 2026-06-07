@@ -762,6 +762,86 @@ paths:
       responses:
         200:
           description: Comprovativo carregado com sucesso
+  /reservations/{id}/cancel:
+   patch:
+      tags: [Reservations]
+      summary: Cancelar reserva (Hóspede)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Motivo do cancelamento (opcional)
+      responses:
+        200:
+          description: Reserva cancelada com sucesso
+  /reservations/{id}/reschedule:
+    patch:
+      tags: [Reservations]
+      summary: Reagendar reserva (Hóspede)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checkIn, checkOut]
+              properties:
+                checkIn:
+                  type: string
+                  format: date-time
+                checkOut:
+                  type: string
+                  format: date-time
+      responses:
+        200:
+          description: Reserva reagendada com sucesso
+  /reservations/{id}/change-room:
+    patch:
+      tags: [Reservations]
+      summary: Alterar quarto da reserva (Hóspede)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newRoomId]
+              properties:
+                newRoomId:
+                  type: string
+                  description: ID do novo quarto (UUID)
+      responses:
+        200:
+          description: Quarto alterado com sucesso
 
 
   # =============================================================
