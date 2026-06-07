@@ -1,6 +1,9 @@
 {
   "name": "hotel-booking-api",
   "version": "1.0.0",
+  "prisma": {
+    "schema": "src/prisma/schema.prisma"
+  },
   "description": "",
   "main": "index.js",
   "scripts": {

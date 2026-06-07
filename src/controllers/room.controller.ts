@@ -93,11 +93,11 @@ static async findAll(req: Request, res: Response) {
 
     try {
 
-      const { status } = req.body;
+      const state = req.body.state ?? req.body.status;
 
       const room = await RoomService.changeStatus(
         req.params.id as string,
-        status
+        state
       );
 
       return res.json(room);
@@ -162,15 +162,23 @@ const roomId = Array.isArray(id) ? id[0] : id;
   }
 }
     static async startMaintenance(req: Request, res: Response) {
-    const result = await RoomService.startMaintenance(
-      req.params.id as string,
-      req.body.type
-    );
-    return res.json(result);
+    try {
+      const result = await RoomService.startMaintenance(
+        req.params.id as string,
+        req.body.type
+      );
+      return res.json(result);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
   }
 
   static async finishMaintenance(req: Request, res: Response) {
-    const result = await RoomService.finishMaintenance(req.params.id as string);
-    return res.json(result);
+    try {
+      const result = await RoomService.finishMaintenance(req.params.id as string);
+      return res.json(result);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
   }
 }

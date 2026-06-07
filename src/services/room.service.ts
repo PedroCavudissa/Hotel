@@ -21,6 +21,7 @@ static async create(data: any) {
 
       pricePerNight: Number(data.pricePerNight),
       capacity: Number(data.capacity),
+      floor: data.floor ? Number(data.floor) : undefined,
       imageUrl: data.imageUrl,
 
       amenities: data.amenities?.length
@@ -39,12 +40,35 @@ static async create(data: any) {
 }
 
  static async findAll(filters?: any) {
-  const { type } = filters || {};
+  const { type, state, availability } = filters || {};
+  const now = new Date();
+  const where: any = {};
+
+  if (type && type !== "all") where.type = type;
+  if (state && state !== "all") where.state = state;
+  if (availability === "free") {
+    where.state = "VACANT_CLEAN";
+    where.maintenance = "NONE";
+    where.reservations = {
+      none: {
+        status: { in: ["PENDING", "CONFIRMED"] },
+        checkIn: { lt: now },
+        checkOut: { gt: now },
+      },
+    };
+  }
+  if (availability === "occupied") where.state = "OCCUPIED";
+  if (availability === "reserved") {
+    where.reservations = {
+      some: {
+        status: { in: ["PENDING", "CONFIRMED"] },
+        checkOut: { gt: now },
+      },
+    };
+  }
 
   return prisma.room.findMany({
-    where: type && type !== "all"
-      ? { type }
-      : undefined,
+    where,
 
     include: {
       amenities: true,
@@ -93,7 +117,8 @@ static async create(data: any) {
         title: data.title,
         description: data.description,
         pricePerNight: data.pricePerNight,
-        capacity: data.capacity,
+        capacity: data.capacity ? Number(data.capacity) : undefined,
+        floor: data.floor ? Number(data.floor) : undefined,
         imageUrl: data.imageUrl,
 
         amenities: {
@@ -113,10 +138,19 @@ static async create(data: any) {
 
     const room = await prisma.room.findUnique({
       where: { id },
+      include: { reservations: true },
     });
 
     if (!room) {
       throw new Error("Quarto não encontrado");
+    }
+
+    const hasActiveReservation = room.reservations.some((reservation) =>
+      ["PENDING", "CONFIRMED"].includes(reservation.status)
+    );
+
+    if (room.state === "OCCUPIED" || hasActiveReservation) {
+      throw new Error("Quartos ocupados ou com reservas ativas nao podem ser eliminados");
     }
 
     await prisma.room.delete({
@@ -128,7 +162,7 @@ static async create(data: any) {
     };
   }
 
-  static async changeStatus(id: string, status: any) {
+  static async changeStatus(id: string, state: any) {
 
     const room = await prisma.room.findUnique({
       where: { id },
@@ -142,7 +176,7 @@ static async create(data: any) {
       where: { id },
 
       data: {
-        status,
+        state,
       },
     });
   }

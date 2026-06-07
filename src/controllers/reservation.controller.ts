@@ -1,77 +1,157 @@
 import { Request, Response } from "express";
 import { ReservationService } from "../services/reservation.service.js";
 
-export class ReservationController {
+function sendError(res: Response, err: any) {
+  return res.status(err.statusCode || 400).json({
+    error: err.message || "Pedido invalido",
+  });
+}
 
-  static async create(req:Request, res:Response) {
+export class ReservationController {
+  static async create(req: Request, res: Response) {
     try {
-      const result = await ReservationService.create(req.body);
+      const result = await ReservationService.create(req.body, (req as any).user);
       return res.status(201).json(result);
     } catch (err: any) {
-      return res.status(400).json({ error: err.message });
+      return sendError(res, err);
     }
   }
 
   static async findAll(req: Request, res: Response) {
-    const data = await ReservationService.findAll();
-    return res.json(data);
+    try {
+      const data = await ReservationService.findAll(req.query);
+      return res.json(data);
+    } catch (err: any) {
+      return sendError(res, err);
+    }
+  }
+
+  static async mine(req: Request, res: Response) {
+    try {
+      const data = await ReservationService.findMine((req as any).user.id);
+      return res.json(data);
+    } catch (err: any) {
+      return sendError(res, err);
+    }
   }
 
   static async findById(req: Request, res: Response) {
     try {
-      const id = req.params.id as string;
-      const data = await ReservationService.findById(id);
+      const data = await ReservationService.findById(req.params.id as string);
       return res.json(data);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (err: any) {
+      return sendError(res, err);
     }
   }
 
   static async update(req: Request, res: Response) {
     try {
-      const id = req.params.id as string;
-      const data = await ReservationService.update(id, req.body);
+      const data = await ReservationService.update(req.params.id as string, req.body);
       return res.json(data);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (err: any) {
+      return sendError(res, err);
+    }
+  }
+
+  static async reschedule(req: Request, res: Response) {
+    try {
+      const data = await ReservationService.reschedule(req.params.id as string, req.body);
+      return res.json(data);
+    } catch (err: any) {
+      return sendError(res, err);
+    }
+  }
+
+  static async changeRoom(req: Request, res: Response) {
+    try {
+      const data = await ReservationService.changeRoom(
+        req.params.id as string,
+        req.body.roomId
+      );
+      return res.json(data);
+    } catch (err: any) {
+      return sendError(res, err);
+    }
+  }
+
+  static async cancel(req: Request, res: Response) {
+    try {
+      const data = await ReservationService.cancel(
+        req.params.id as string,
+        req.body.reason
+      );
+      return res.json(data);
+    } catch (err: any) {
+      return sendError(res, err);
     }
   }
 
   static async delete(req: Request, res: Response) {
     try {
-      const id = req.params.id as string;
-      const data = await ReservationService.delete(id);
+      const data = await ReservationService.delete(req.params.id as string);
       return res.json(data);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (err: any) {
+      return sendError(res, err);
     }
   }
-  static async confirmPayment(req:Request, res:Response) {
-    try {
-      const { id } = req.params as { id: string };
-      const { method } = req.body;
 
-      const result = await ReservationService.confirmPayment(id, method);
+  static async confirmPayment(req: Request, res: Response) {
+    try {
+      const result = await ReservationService.confirmPayment(
+        req.params.id as string,
+        req.body.method,
+        req.body.amountPaid ? Number(req.body.amountPaid) : undefined
+      );
       return res.json(result);
     } catch (err: any) {
-      return res.status(400).json({ error: err.message });
+      return sendError(res, err);
     }
   }
-    static async checkIn(req:Request, res:Response) {
+
+  static async uploadPaymentProof(req: Request, res: Response) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Arquivo nao enviado" });
+      }
+
+      const fileUrl = `http://localhost:3000/uploads/${req.file.filename}`;
+      const result = await ReservationService.uploadPaymentProof(
+        req.params.id as string,
+        fileUrl
+      );
+      return res.json(result);
+    } catch (err: any) {
+      return sendError(res, err);
+    }
+  }
+
+  static async checkIn(req: Request, res: Response) {
     try {
       const result = await ReservationService.checkIn(req.params.id as string);
       return res.json(result);
-    } catch (err) {
-      return  res.status(err.statusCode || 400).json({ error: err.message });
+    } catch (err: any) {
+      return sendError(res, err);
     }
   }
 
   static async checkOut(req: Request, res: Response) {
     try {
-      const result = await ReservationService.checkOut(req.params.id as string);
+      const result = await ReservationService.checkOut(
+        req.params.id as string,
+        req.body.earlyCheckoutReason
+      );
       return res.json(result);
-    } catch (err) {
-      return res.status(err.statusCode || 400).json({ error: err.message });
+    } catch (err: any) {
+      return sendError(res, err);
     }
   }
+
+  static async myReservations(req: Request, res: Response) {
+    try {
+      const data = await ReservationService.myReservations((req as any).user.id);
+      return res.json(data);
+    } catch (err: any) {
+      return sendError(res, err);
+    }
+}
 }

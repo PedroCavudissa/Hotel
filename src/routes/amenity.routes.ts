@@ -1,7 +1,3 @@
-// ====================================
-// src/routes/amenity.routes.ts
-// ====================================
-
 import { Router } from "express";
 
 import { AmenityController } from "../controllers/amenity.controller.js";
@@ -12,7 +8,7 @@ import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 
 const router = Router();
 
-router.use(authMiddleware);
+const staffRoles = ["ADMIN", "MANAGER", "RECEPTION"];
 
 router.get(
   "/",

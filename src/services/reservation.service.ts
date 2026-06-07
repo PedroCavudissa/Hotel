@@ -1,4 +1,11 @@
 import { prisma } from "../prisma/client.js";
+import { EmailService } from "./email.service.js";
+
+type AuthUser = {
+  id: string;
+  role: string;
+};
+
 export class AppError extends Error {
   statusCode: number;
 
@@ -7,350 +14,561 @@ export class AppError extends Error {
     this.statusCode = statusCode;
   }
 }
+
+const reservationInclude = {
+  room: true,
+  guest: true,
+  user: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      emailVerified: true,
+      isActive: true,
+      createdAt: true,
+    },
+  },
+} as const;
+
 export class ReservationService {
-
-  // =========================
-  // CREATE (HOLD 15 MIN)
-  // =========================
-static async create(data: any) {
-  const now = new Date();
-
-  const room = await prisma.room.findUnique({
-    where: { id: data.roomId },
-  });
-
-  if (!room) throw new Error("Quarto não encontrado");
-
-  const canBook =
-    room.state === "VACANT_CLEAN" &&
-    room.maintenance === "NONE";
-
-  if (!canBook) {
-    throw new Error("Quarto não disponível");
+  private static async getPolicy() {
+    return prisma.hotelPolicy.upsert({
+      where: { id: "default" },
+      update: {},
+      create: { id: "default" },
+    });
   }
 
-  const conflict = await prisma.reservation.findFirst({
-    where: {
-      roomId: data.roomId,
-      OR: [
-        { status: "CONFIRMED" },
-        {
-          paymentStatus: "PENDING",
-          expiresAt: { gt: now },
-        },
-      ],
-    },
-  });
-
-  if (conflict) {
-    throw new Error("Quarto reservado temporariamente");
+  private static parseDate(value: string | Date, field: string) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new AppError(`${field} invalido`, 400);
+    }
+    return date;
   }
 
-  const nights = Math.ceil(
-    (new Date(data.checkOut).getTime() -
-      new Date(data.checkIn).getTime()) /
-      (1000 * 60 * 60 * 24)
-  );
-
-  if (nights <= 0) {
-    throw new Error("Datas inválidas");
+  private static sameCalendarDay(a: Date, b: Date) {
+    return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
   }
 
-  const totalPrice = room.pricePerNight * nights;
+  private static calculateNights(checkIn: Date, checkOut: Date) {
+    const nights = Math.ceil(
+      (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)
+    );
 
-  return prisma.reservation.create({
-    data: {
-      userId: data.userId,
-      roomId: data.roomId,
-      checkIn: new Date(data.checkIn),
-      checkOut: new Date(data.checkOut),
+    if (nights <= 0) {
+      throw new AppError("Datas da reserva invalidas", 400);
+    }
 
-      totalPrice,
+    return nights;
+  }
 
-      status: "PENDING",
-      paymentStatus: "PENDING",
+  /**
+   * Procura conflitos de reservas ativas (CONFIRMED) ou reservas PENDENTES 
+   * que ainda não expiraram. Ambas retiram o quarto da disponibilidade geral.
+   */
+  private static async findRoomConflict(
+    roomId: string,
+    checkIn: Date,
+    checkOut: Date,
+    excludeReservationId?: string
+  ) {
+    const now = new Date();
 
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-    },
-  include: {
-  room: true,
-  user: {
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      emailVerified: true,
-      isActive: true,
-      createdAt: true,
+    return prisma.reservation.findFirst({
+      where: {
+        roomId,
+        id: excludeReservationId ? { not: excludeReservationId } : undefined,
+        checkIn: { lt: checkOut },
+        checkOut: { gt: checkIn },
+        OR: [
+          { status: "CONFIRMED" },
+          {
+            status: "PENDING",
+            paymentStatus: "PENDING",
+            expiresAt: { gt: now },
+          },
+        ],
+      },
+    });
+  }
+
+  /**
+   * CORREÇÃO DE DISPONIBILIDADE:
+   * Sugere um quarto livre excluindo TODOS os quartos que entram em conflito com reservas
+   * CONFIRMED ou PENDING válidas para o intervalo de tempo solicitado.
+   */
+  private static async suggestRoom(
+    checkIn: Date,
+    checkOut: Date,
+    capacity?: number,
+    excludeRoomId?: string
+  ) {
+    const now = new Date();
+
+    // 1. Encontra os IDs de todos os quartos indisponíveis (Confirmados ou Pendentes Ativos)
+    const conflictingReservations = await prisma.reservation.findMany({
+      where: {
+        checkIn: { lt: checkOut },
+        checkOut: { gt: checkIn },
+        OR: [
+          { status: "CONFIRMED" },
+          {
+            status: "PENDING",
+            paymentStatus: "PENDING",
+            expiresAt: { gt: now },
+          },
+        ],
+      },
+      select: { roomId: true },
+    });
+
+    const unavailableRoomIds = conflictingReservations.map((r) => r.roomId);
+    if (excludeRoomId) {
+      unavailableRoomIds.push(excludeRoomId);
+    }
+
+    // 2. Procura um quarto que NÃO esteja na lista de indisponíveis
+    return prisma.room.findFirst({
+      where: {
+        id: { notIn: unavailableRoomIds },
+        maintenance: "NONE",
+        capacity: capacity ? { gte: capacity } : undefined,
+      },
+      orderBy: [{ pricePerNight: "asc" }, { number: "asc" }],
+    });
+  }
+
+  private static async assertRoomAvailable(
+    roomId: string,
+    checkIn: Date,
+    checkOut: Date,
+    excludeReservationId?: string
+  ) {
+    const room = await prisma.room.findUnique({ where: { id: roomId } });
+
+    if (!room) throw new AppError("Quarto nao encontrado", 404);
+    if (room.maintenance !== "NONE") {
+      throw new AppError("Quarto em manutencao", 409);
+    }
+
+    const conflict = await this.findRoomConflict(
+      roomId,
+      checkIn,
+      checkOut,
+      excludeReservationId
+    );
+
+    if (conflict) {
+      const suggestion = await this.suggestRoom(
+        checkIn,
+        checkOut,
+        room.capacity,
+        roomId
+      );
+      const message = suggestion
+        ? `Quarto indisponivel. Sugestao: quarto ${suggestion.number}`
+        : "Quarto indisponivel para estas datas";
+
+      throw new AppError(message, 409);
+    }
+
+    return room;
+  }
+
+  private static validateGuestData(data: any, requireName = false) {
+    if (requireName && !data?.name) {
+      throw new AppError("Nome do hospede e obrigatorio", 400);
+    }
+
+    if (!data?.idDocument) {
+      throw new AppError("Numero do bilhete ou passaporte e obrigatorio", 400);
+    }
+
+    if (!data?.province && !data?.country) {
+      throw new AppError("Informe a provincia ou o pais do hospede", 400);
     }
   }
-}
-  });
-}
-  // =========================
-  // FIND ALL
-  // =========================
-static async findAll() {
-  return prisma.reservation.findMany({
-   include: {
-  room: true,
-  user: {
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      emailVerified: true,
-      isActive: true,
-      createdAt: true,
-    }
-  }
-},
-    orderBy: { createdAt: "desc" },
-  });
-}
 
-  // =========================
-  // FIND BY ID
-  // =========================
+  private static async upsertGuestForUser(userId: string, guestInput: any) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new AppError("Utilizador nao encontrado", 404);
+
+    const existingGuest = await prisma.guest.findUnique({ where: { userId } });
+
+    const guestData = {
+      name: guestInput?.name ?? user.name,
+      email: guestInput?.email ?? user.email,
+      phone: guestInput?.phone ?? existingGuest?.phone,
+      idDocument: guestInput?.idDocument ?? existingGuest?.idDocument,
+      province: guestInput?.province ?? existingGuest?.province,
+      country: guestInput?.country ?? existingGuest?.country,
+      isForeigner: guestInput?.isForeigner !== undefined ? Boolean(guestInput.isForeigner) : (existingGuest?.isForeigner ?? false),
+    };
+
+    this.validateGuestData(guestData, false);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        phone: guestData.phone,
+        idDocument: guestData.idDocument,
+        province: guestData.province,
+        country: guestData.country,
+        isForeigner: guestData.isForeigner,
+      },
+    });
+
+    return prisma.guest.upsert({
+      where: { userId },
+      update: guestData,
+      create: {
+        ...guestData,
+        userId,
+      },
+    });
+  }
+
+  private static async createWalkInGuest(data: any, staffId: string) {
+    this.validateGuestData(data, true);
+
+    return prisma.guest.create({
+      data: {
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        idDocument: data.idDocument,
+        province: data.province,
+        country: data.country,
+        isForeigner: Boolean(data.isForeigner),
+        verifiedByStaff: true,
+        createdById: staffId,
+      },
+    });
+  }
+
+  static async create(data: any, actor: AuthUser) {
+    const checkIn = this.parseDate(data.checkIn, "checkIn");
+    const checkOut = this.parseDate(data.checkOut, "checkOut");
+    const nights = this.calculateNights(checkIn, checkOut);
+    const room = await this.assertRoomAvailable(data.roomId, checkIn, checkOut);
+    const policy = await this.getPolicy();
+
+    const isStaff = ["ADMIN", "MANAGER", "RECEPTION"].includes(actor.role);
+    let guest;
+    let userId: string | undefined;
+
+    if (isStaff && data.guest) {
+      guest = await this.createWalkInGuest(data.guest, actor.id);
+    } else {
+      userId = isStaff && data.userId ? data.userId : actor.id;
+      guest = await this.upsertGuestForUser(userId, data.guest ?? data);
+    }
+
+    const reservation = await prisma.reservation.create({
+      data: {
+        userId,
+        guestId: guest.id,
+        roomId: data.roomId,
+        checkIn,
+        checkOut,
+        totalPrice: room.pricePerNight * nights,
+        status: "PENDING",
+        paymentStatus: "PENDING",
+        expiresAt: new Date(Date.now() + policy.paymentHoldMinutes * 60 * 1000),
+        createdById: isStaff ? actor.id : undefined,
+        externalPlatform: data.externalPlatform,
+        externalReservationId: data.externalReservationId,
+      },
+      include: reservationInclude,
+    });
+
+    return reservation;
+  }
+
+  static async findAll(filters: any = {}) {
+    const where: any = {};
+
+    if (filters.status) where.status = filters.status;
+    if (filters.paymentStatus) where.paymentStatus = filters.paymentStatus;
+    if (filters.active === "true") {
+      where.status = { in: ["PENDING", "CONFIRMED"] };
+    }
+    if (filters.history === "true") {
+      where.status = { in: ["COMPLETED", "CANCELLED", "EXPIRED"] };
+    }
+
+    return prisma.reservation.findMany({
+      where,
+      include: reservationInclude,
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  static async myReservations(userId: string) {
+    return prisma.reservation.findMany({
+      where: { userId },
+      include: reservationInclude,
+      orderBy: { createdAt: "desc" },
+    });
+  }
+  
+  static async findMine(userId: string) {
+    return prisma.reservation.findMany({
+      where: { userId },
+      include: reservationInclude,
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
   static async findById(id: string) {
-    return prisma.reservation.findUnique({
-      where: { id },
-    include: {
-  room: true,
-  user: {
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      emailVerified: true,
-      isActive: true,
-      createdAt: true,
-    }
-  }
-}
-    });
-  }
-
-  // =========================
-  // UPDATE (ADMIN / RECEPTION)
-  // =========================
-  static async update(id: string, data: any) {
-
     const reservation = await prisma.reservation.findUnique({
-      where: { id }
+      where: { id },
+      include: reservationInclude,
     });
 
-    if (!reservation) {
-      throw new Error("Reserva não encontrada");
+    if (!reservation) throw new AppError("Reserva nao encontrada", 404);
+    return reservation;
+  }
+
+  static async update(id: string, data: any) {
+    return this.reschedule(id, data);
+  }
+
+  static async reschedule(id: string, data: any) {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id },
+      include: { room: true },
+    });
+
+    if (!reservation) throw new AppError("Reserva nao encontrada", 404);
+    if (["COMPLETED", "CANCELLED", "EXPIRED"].includes(reservation.status)) {
+      throw new AppError("Esta reserva ja nao pode ser alterada", 409);
     }
+
+    const checkIn = data.checkIn
+      ? this.parseDate(data.checkIn, "checkIn")
+      : reservation.checkIn;
+    const checkOut = data.checkOut
+      ? this.parseDate(data.checkOut, "checkOut")
+      : reservation.checkOut;
+    const roomId = data.roomId ?? reservation.roomId;
+
+    const nights = this.calculateNights(checkIn, checkOut);
+    const room = await this.assertRoomAvailable(roomId, checkIn, checkOut, id);
 
     return prisma.reservation.update({
       where: { id },
       data: {
-        checkIn: data.checkIn ? new Date(data.checkIn) : undefined,
-        checkOut: data.checkOut ? new Date(data.checkOut) : undefined,
-        totalPrice: data.totalPrice,
+        roomId,
+        checkIn,
+        checkOut,
+        totalPrice: room.pricePerNight * nights,
       },
-      include: {
-        room: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-            emailVerified: true,
-            isActive: true,
-            createdAt: true,
-          }
-        }
-      }
+      include: reservationInclude,
     });
   }
 
-  // =========================
-  // DELETE (CANCELAR RESERVA)
-  // =========================
-  static async delete(id: string) {
+  static async changeRoom(id: string, roomId: string) {
+    if (!roomId) throw new AppError("Informe o novo quarto", 400);
+    return this.reschedule(id, { roomId });
+  }
 
-    const reservation = await prisma.reservation.findUnique({
-      where: { id }
-    });
-
-    if (!reservation) {
-      throw new Error("Reserva não encontrada");
+  static async cancel(id: string, reason: string) {
+    if (!reason?.trim()) {
+      throw new AppError("Informe o motivo do cancelamento", 400);
     }
+
+    const reservation = await prisma.reservation.findUnique({ where: { id } });
+    if (!reservation) throw new AppError("Reserva nao encontrada", 404);
+    if (["COMPLETED", "CANCELLED", "EXPIRED"].includes(reservation.status)) {
+      throw new AppError("Esta reserva ja esta encerrada", 409);
+    }
+
+    const policy = await this.getPolicy();
+    const paidAmount = reservation.amountPaid ?? 0;
+    const percentFee = reservation.totalPrice * (policy.cancellationFeePercent / 100);
+    const cancellationFee = paidAmount > 0
+      ? Math.min(paidAmount, Math.max(policy.minCancellationFee, percentFee))
+      : 0;
+    const refundAmount = Math.max(paidAmount - cancellationFee, 0);
 
     return prisma.reservation.update({
       where: { id },
       data: {
         status: "CANCELLED",
-        paymentStatus: "CANCELLED"
-      }
+        paymentStatus: "CANCELLED",
+        cancellationReason: reason.trim(),
+        cancellationFee,
+        refundAmount,
+      },
+      include: reservationInclude,
     });
   }
 
-  // =========================
-  // CONFIRM PAYMENT
-  // =========================
-static async confirmPayment(id: string, method: string) {
-  const reservation = await prisma.reservation.findUnique({
-    where: { id }
-  });
-
-  if (!reservation) throw new Error("Reserva não encontrada");
-
-  return prisma.reservation.update({
-    where: { id },
-    data: {
-      paymentStatus: "PAID",
-      status: "CONFIRMED",
-      paymentMethod: method,
-
-      // 💰 IMPORTANTE: registar pagamento real
-      amountPaid: reservation.totalPrice
-    },
-  });
-}
-
-static async expireOldReservations() {
-  return prisma.reservation.updateMany({
-    where: {
-      paymentStatus: "PENDING",
-      expiresAt: { lt: new Date() },
-    },
-    data: {
-      paymentStatus: "CANCELLED",
-      status: "EXPIRED",
-    },
-  });
-}
-static async checkIn(reservationId: string) {
-  const now = new Date();
-
-  const reservation = await prisma.reservation.findUnique({
-    where: { id: reservationId },
-    include: { room: true }
-  });
-
-  if (!reservation) {
-    throw new AppError(" Reserva não encontrada no sistema", 404);
-  }
-
-  // ❌ pagamento
-  if (reservation.paymentStatus !== "PAID") {
-    throw new AppError(
-      "Check-in bloqueado: pagamento ainda não foi confirmado pela receção",
-      403
-    );
-  }
-
-  // ❌ expiração
-  if (reservation.expiresAt && reservation.expiresAt < now) {
-    throw new AppError(
-      "Reserva expirada: o tempo de pagamento (15 min) terminou",
-      410
-    );
-  }
-
-  // ❌ status
-  if (reservation.status !== "CONFIRMED") {
-    throw new AppError(
-      "Reserva ainda não está confirmada para check-in",
-      409
-    );
-  }
-
-  // ✔ atualiza estado do quarto
-  await prisma.room.update({
-    where: { id: reservation.roomId },
-    data: {
-      state: "OCCUPIED"
+  static async delete(id: string) {
+    const reservation = await prisma.reservation.findUnique({ where: { id } });
+    if (!reservation) throw new AppError("Reserva nao encontrada", 404);
+    if (!["COMPLETED", "CANCELLED", "EXPIRED"].includes(reservation.status)) {
+      throw new AppError("Reservas ativas nao podem ser eliminadas", 409);
     }
-  });
 
-  // ✔ atualiza reserva
-  return prisma.reservation.update({
-    where: { id: reservationId },
-    data: {
-      checkInReal: now
-    }
-  });
-}
-static async checkOut(reservationId: string) {
-  const reservation = await prisma.reservation.findUnique({
-    where: { id: reservationId },
-    include: { room: true }
-  });
-
-  if (!reservation) {
-    throw new AppError("❌ Reserva não encontrada", 404);
+    await prisma.reservation.delete({ where: { id } });
+    return { message: "Reserva eliminada com sucesso" };
   }
 
-  // ❌ nunca fez check-in
-  if (reservation.status !== "CONFIRMED") {
-    throw new AppError(
-      "⛔ Check-out inválido: o cliente ainda não fez check-in",
-      409
+  static async confirmPayment(id: string, method: string, amountPaid?: number) {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id },
+      include: reservationInclude,
+    });
+
+    if (!reservation) throw new AppError("Reserva nao encontrada", 404);
+    if (reservation.expiresAt && reservation.expiresAt < new Date()) {
+      throw new AppError("Reserva expirada. E necessario refazer a reserva", 410);
+    }
+
+    const updated = await prisma.reservation.update({
+      where: { id },
+      data: {
+        paymentStatus: "PAID",
+        status: "CONFIRMED",
+        paymentMethod: method,
+        amountPaid: amountPaid ?? reservation.totalPrice,
+      },
+      include: reservationInclude,
+    });
+
+    const email = updated.guest?.email ?? updated.user?.email;
+    if (email) {
+      await EmailService.sendReservationConfirmation(email, updated);
+    }
+
+    return updated;
+  }
+
+  static async uploadPaymentProof(id: string, paymentProofUrl: string) {
+    await this.findById(id);
+
+    return prisma.reservation.update({
+      where: { id },
+      data: { paymentProofUrl },
+      include: reservationInclude,
+    });
+  }
+
+  static async expireOldReservations() {
+    return prisma.reservation.updateMany({
+      where: {
+        paymentStatus: "PENDING",
+        expiresAt: { lt: new Date() },
+      },
+      data: {
+        paymentStatus: "CANCELLED",
+        status: "EXPIRED",
+      },
+    });
+  }
+
+  static async checkIn(reservationId: string) {
+    const now = new Date();
+
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { room: true },
+    });
+
+    if (!reservation) throw new AppError("Reserva nao encontrada", 404);
+    if (reservation.paymentStatus !== "PAID") {
+      throw new AppError("Pagamento ainda nao confirmado", 403);
+    }
+    if (reservation.expiresAt && reservation.expiresAt < now) {
+      throw new AppError("Reserva expirada. E necessario refazer a reserva", 410);
+    }
+    if (reservation.status !== "CONFIRMED") {
+      throw new AppError("Reserva ainda nao confirmada", 409);
+    }
+    if (reservation.checkInReal) {
+      throw new AppError("Check-in ja realizado", 409);
+    }
+    if (!this.sameCalendarDay(now, reservation.checkIn)) {
+      throw new AppError("Check-in permitido apenas no dia agendado", 403);
+    }
+    if (reservation.room.state !== "VACANT_CLEAN") {
+      throw new AppError("Quarto ainda nao esta pronto para entrada", 409);
+    }
+
+    await prisma.room.update({
+      where: { id: reservation.roomId },
+      data: { state: "OCCUPIED" },
+    });
+
+    return prisma.reservation.update({
+      where: { id: reservationId },
+      data: { checkInReal: now },
+      include: reservationInclude,
+    });
+  }
+
+  static async checkOut(reservationId: string, earlyCheckoutReason?: string) {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { room: true },
+    });
+
+    if (!reservation) throw new AppError("Reserva nao encontrada", 404);
+    if (reservation.status !== "CONFIRMED" || !reservation.checkInReal) {
+      throw new AppError("Check-out invalido: hospede ainda nao entrou", 409);
+    }
+
+    const now = new Date();
+    const policy = await this.getPolicy();
+    let refundAmount = 0;
+    let extraCharge = 0;
+
+    if (now < reservation.checkOut && policy.earlyCheckoutRefundPercent > 0) {
+      if (!earlyCheckoutReason?.trim()) {
+        throw new AppError("Informe o motivo da saida antecipada", 400);
+      }
+
+      const totalHours =
+        (reservation.checkOut.getTime() - reservation.checkIn.getTime()) /
+        (1000 * 60 * 60);
+      const unusedHours =
+        (reservation.checkOut.getTime() - now.getTime()) / (1000 * 60 * 60);
+      const unusedValue = (reservation.totalPrice / totalHours) * unusedHours;
+      refundAmount = unusedValue * (policy.earlyCheckoutRefundPercent / 100);
+    }
+
+    const graceEnd = new Date(
+      reservation.checkOut.getTime() + policy.lateCheckoutGraceMinutes * 60 * 1000
     );
-  }
-
-  const now = new Date();
-
-  // opcional: validar se já passou check-in
-  if (reservation.checkIn > now) {
-    throw new AppError(
-      "⛔ Ainda não é possível fazer check-out antes do check-in",
-      400
-    );
-  }
-
- 
-  const planned = reservation.checkOut.getTime();
-  const actual = now.getTime();
-
-  let refundAmount = 0;
-  let extraCharge = 0;
-
-  const totalHours =
-    (reservation.checkOut.getTime() - reservation.checkIn.getTime()) /
-    (1000 * 60 * 60);
-
-  const ratePerHour = reservation.totalPrice / totalHours;
-
-  // 🟡 EARLY CHECKOUT
-  if (actual < planned) {
-    const unusedHours = (planned - actual) / (1000 * 60 * 60);
-    refundAmount = unusedHours * ratePerHour;
-  }
-
-  // 🔴 LATE CHECKOUT
-  if (actual > planned) {
-    const extraHours = (actual - planned) / (1000 * 60 * 60);
-    extraCharge = extraHours * ratePerHour;
-  }
-
-  // ✔ atualiza quarto para limpeza
-  await prisma.room.update({
-    where: { id: reservation.roomId },
-    data: {
-      state: "VACANT_DIRTY",
-      inspection: "NOT_INSPECTED"
+    if (now > graceEnd) {
+      const extraHours = Math.ceil(
+        (now.getTime() - graceEnd.getTime()) / (1000 * 60 * 60)
+      );
+      extraCharge = extraHours * policy.lateCheckoutHourlyFee;
     }
-  });
 
-  // ✔ finaliza reserva
-  return prisma.reservation.update({
-    where: { id: reservationId },
-    data: {
-      status: "COMPLETED",
-      checkOutReal: now,
-      refundAmount,
-      extraCharge
-    }
-  });
-}
+    await prisma.room.update({
+      where: { id: reservation.roomId },
+      data: {
+        state: "VACANT_DIRTY",
+        inspection: "NOT_INSPECTED",
+      },
+    });
+
+    return prisma.reservation.update({
+      where: { id: reservationId },
+      data: {
+        status: "COMPLETED",
+        checkOutReal: now,
+        refundAmount,
+        extraCharge,
+        earlyCheckoutReason,
+      },
+      include: reservationInclude,
+    });
+  }
 }

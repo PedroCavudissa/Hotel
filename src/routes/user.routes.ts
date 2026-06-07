@@ -4,37 +4,13 @@ import { authMiddleware } from "../middlewares/auth.middleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 
 const router = Router();
+const staffRoles = ["ADMIN", "MANAGER", "RECEPTION"];
 
-// listar users
-router.get(
-  "/",
-  authMiddleware,
-  roleMiddleware(["ADMIN"]),
-  UserController.getAll
-);
-
-// utilizador logado
-router.get(
-  "/me",
-  authMiddleware,
-  UserController.me
-);
-
-// buscar user por id
-router.get(
-  "/:id",
-  authMiddleware,
-  roleMiddleware(["ADMIN"]),
-  UserController.getById
-);
-
-// deletar user
-router.delete(
-  "/:id",
-  authMiddleware,
-  roleMiddleware(["ADMIN"]),
-  UserController.delete
-);
-
-
+router.get("/", authMiddleware, roleMiddleware(staffRoles), UserController.getAll);
+router.get("/guests", authMiddleware, roleMiddleware(staffRoles), UserController.guests);
+router.get("/me", authMiddleware, UserController.me);
+router.patch("/me", authMiddleware, UserController.updateMe);
+router.get("/:id", authMiddleware, roleMiddleware(staffRoles), UserController.getById);
+router.delete("/:id", authMiddleware, roleMiddleware(["ADMIN"]), UserController.delete);
+router.patch("/me", authMiddleware, roleMiddleware(["CLIENT","RECEPTION"]), UserController.updateMe);
 export default router;
