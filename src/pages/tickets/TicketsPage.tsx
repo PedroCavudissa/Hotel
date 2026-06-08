@@ -1,15 +1,18 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ticketsApi, roomsApi } from '@/api/services'
+import * as apiServices from '@/api/services' // Importação robusta para evitar problemas de destructuring
 import { PageSpinner } from '@/components/ui'
-import { 
-  Plus, Ticket, ChevronRight, Send, X, Search, 
-  CheckCircle, Clock, MessageSquare, AlertTriangle, 
-  Calendar, Info, ShieldAlert, Tag, User, HelpCircle
+import {
+  Plus, Ticket, ChevronRight, Send, X, Search,
+  CheckCircle, Clock, MessageSquare, AlertTriangle,
+  Calendar, Info, Tag, User, HelpCircle
 } from 'lucide-react'
 import { formatDateTime, cn } from '@/utils'
 import toast from 'react-hot-toast'
 import useAuthStore from '@/store/authStore'
+
+
+const { ticketsApi, roomsApi } = apiServices
 
 // Tipos
 export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'WAITING_CLIENT' | 'RESOLVED' | 'CLOSED'
@@ -77,7 +80,7 @@ export default function TicketsPage() {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [replyMessage, setReplyMessage] = useState('')
   const [search, setSearch] = useState('')
-  
+
   const [form, setForm] = useState({
     subject: '',
     message: '',
@@ -96,11 +99,11 @@ export default function TicketsPage() {
       const params: any = {}
       if (filterStatus !== 'all') params.status = filterStatus
       if (search && isStaff) params.search = search
-      
-      const response = isStaff 
+
+      const response = isStaff
         ? await ticketsApi.listAll(params)
         : await ticketsApi.listMine(params)
-      
+
       const result = response.data
       if (Array.isArray(result)) return result
       if (result?.data && Array.isArray(result.data)) return result.data
@@ -108,12 +111,15 @@ export default function TicketsPage() {
       return []
     }
   })
-  
+
   const tickets = ticketsData as Ticket[]
 
   const { data: rooms = [] } = useQuery({
     queryKey: ['rooms'],
-    queryFn: () => roomsApi.list().then(r => r.data),
+    queryFn: async () => {
+      const response = await roomsApi.list()
+      return Array.isArray(response.data) ? response.data : (response.data as any)?.data || []
+    },
     enabled: showCreate
   })
 
@@ -130,18 +136,19 @@ export default function TicketsPage() {
 
   // Mutations
   const createMutation = useMutation({
-    mutationFn: () => ticketsApi.create({
-      subject: form.subject,
-      message: form.message,
-      type: form.type,
-      priority: form.priority,
-      reservationId: form.reservationId || undefined,
-      requestedCheckIn: form.requestedCheckIn || undefined,
-      requestedCheckOut: form.requestedCheckOut || undefined,
-      requestedRoomId: form.requestedRoomId || undefined,
+    mutationFn: (formData: typeof form) => ticketsApi.create({
+      subject: formData.subject,
+      message: formData.message,
+      type: formData.type,
+      priority: formData.priority,
+      reservationId: formData.reservationId || undefined,
+      requestedCheckIn: formData.requestedCheckIn || undefined,
+      requestedCheckOut: formData.requestedCheckOut || undefined,
+      requestedRoomId: formData.requestedRoomId || undefined,
     }),
     onSuccess: () => {
       refetch()
+      qc.invalidateQueries({ queryKey: ['tickets-stats'] })
       setShowCreate(false)
       setForm({
         subject: '', message: '', type: 'SUPPORT', priority: 'MEDIUM',
@@ -164,10 +171,11 @@ export default function TicketsPage() {
   })
 
   const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => 
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
       ticketsApi.update(id, { status }),
     onSuccess: (data, variables) => {
       refetch()
+      qc.invalidateQueries({ queryKey: ['tickets-stats'] })
       if (selectedTicket && selectedTicket.id === variables.id) {
         setSelectedTicket(prev => prev ? { ...prev, status: variables.status as TicketStatus } : null)
       }
@@ -183,11 +191,12 @@ export default function TicketsPage() {
     enabled: isStaff,
   })
 
+  // Filtro local refinado para o lado do cliente (caso o backend não filtre o search de imediato)
   const filteredTickets = tickets.filter(ticket => {
     const matchStatus = filterStatus === 'all' || ticket.status === filterStatus
-    const matchSearch = !search || 
-      ticket.code.toLowerCase().includes(search.toLowerCase()) ||
-      ticket.subject.toLowerCase().includes(search.toLowerCase()) ||
+    const matchSearch = !search ||
+      ticket.code?.toLowerCase().includes(search.toLowerCase()) ||
+      ticket.subject?.toLowerCase().includes(search.toLowerCase()) ||
       ticket.user?.name?.toLowerCase().includes(search.toLowerCase())
     return matchStatus && matchSearch
   })
@@ -206,7 +215,7 @@ export default function TicketsPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)] overflow-hidden gap-5 animate-fadeIn">
-      
+
       {/* Top Header & Stats */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 flex-shrink-0 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
         <div>
@@ -225,8 +234,8 @@ export default function TicketsPage() {
               </div>
             ))}
           </div>
-          <button 
-            className="bg-[#001E3D] hover:bg-[#002d5c] text-white px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-sm text-xs font-semibold h-fit self-center" 
+          <button
+            className="bg-[#001E3D] hover:bg-[#002d5c] text-white px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-sm text-xs font-semibold h-fit self-center"
             onClick={() => setShowCreate(true)}
           >
             <Plus size={15} /> Novo Ticket
@@ -236,13 +245,13 @@ export default function TicketsPage() {
 
       {/* Main Workspace (Split View) */}
       <div className="flex flex-1 overflow-hidden gap-5 items-stretch">
-        
+
         {/* LEFT COLUMN: Ticket List */}
         <div className={cn(
           "bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col overflow-hidden transition-all duration-300",
           selectedTicket ? "w-full md:w-[40%] lg:w-[35%] hidden md:flex" : "w-full"
         )}>
-          
+
           {/* Filters Bar Inside Column */}
           <div className="p-3 border-b border-slate-100 bg-slate-50/50 space-y-2.5">
             <div className="relative">
@@ -254,7 +263,7 @@ export default function TicketsPage() {
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
-            
+
             {/* Horizontal Scroll Filter Chips */}
             <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
               {[
@@ -264,13 +273,13 @@ export default function TicketsPage() {
                 { v: 'WAITING_CLIENT', l: 'Aguardando' },
                 { v: 'RESOLVED', l: 'Resolvidos' }
               ].map(f => (
-                <button 
-                  key={f.v} 
+                <button
+                  key={f.v}
                   onClick={() => setFilterStatus(f.v)}
                   className={cn(
                     'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all flex-shrink-0 border',
-                    filterStatus === f.v 
-                      ? 'bg-[#001E3D] border-[#001E3D] text-white shadow-sm' 
+                    filterStatus === f.v
+                      ? 'bg-[#001E3D] border-[#001E3D] text-white shadow-sm'
                       : 'bg-white border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                   )}
                 >
@@ -290,17 +299,16 @@ export default function TicketsPage() {
             ) : (
               filteredTickets.map((ticket) => {
                 const typeObj = TICKET_TYPES.find(t => t.value === ticket.type)
-                const TypeIcon = typeObj?.icon || HelpCircle
                 const isSelected = selectedTicket?.id === ticket.id
 
                 return (
-                  <div 
-                    key={ticket.id} 
+                  <div
+                    key={ticket.id}
                     onClick={() => setSelectedTicket(ticket)}
                     className={cn(
                       "p-4 cursor-pointer transition-all flex items-start justify-between gap-3 relative border-l-4",
-                      isSelected 
-                        ? "bg-slate-50/80 border-l-[#001E3D]" 
+                      isSelected
+                        ? "bg-slate-50/80 border-l-[#001E3D]"
                         : "border-l-transparent hover:bg-slate-50/40"
                     )}
                   >
@@ -351,12 +359,12 @@ export default function TicketsPage() {
         )}>
           {selectedTicket ? (
             <div className="flex flex-col h-full w-full">
-              
+
               {/* Workspace Header */}
               <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white flex-shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
-                  <button 
-                    onClick={() => setSelectedTicket(null)} 
+                  <button
+                    onClick={() => setSelectedTicket(null)}
                     className="p-1.5 rounded-lg hover:bg-slate-100 md:hidden"
                   >
                     <X size={16} className="text-slate-500" />
@@ -416,12 +424,12 @@ export default function TicketsPage() {
                   <div key={msg.id} className={cn('flex flex-col', msg.isStaff === isStaff ? 'items-end' : 'items-start')}>
                     <div className={cn(
                       'max-w-[80%] rounded-2xl px-4 py-2.5 shadow-xs text-xs',
-                      msg.isStaff === isStaff 
-                        ? 'bg-[#001E3D] text-white rounded-tr-none' 
+                      msg.isStaff === isStaff
+                        ? 'bg-[#001E3D] text-white rounded-tr-none'
                         : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'
                     )}>
                       <div className="flex items-center gap-2 mb-1 opacity-75 text-[10px]">
-                        <span className="font-bold">{msg.user.name}</span>
+                        <span className="font-bold">{msg.user?.name || 'Utilizador'}</span>
                         <span>•</span>
                         <span>{formatDateTime(msg.createdAt)}</span>
                       </div>
@@ -429,7 +437,7 @@ export default function TicketsPage() {
                     </div>
                   </div>
                 ))}
-                
+
                 {messages.length === 0 && !selectedTicket.message && (
                   <div className="text-center py-12 text-slate-400 text-xs">
                     <MessageSquare size={24} className="mx-auto text-slate-300 mb-2" />
@@ -490,12 +498,12 @@ export default function TicketsPage() {
 
       </div>
 
-      {/* NEW TICKET SLIDE-OVER (GAVETA LATERAL - SUBSTITUI O MODAL CENTRAL) */}
+      {/* NEW TICKET SLIDE-OVER */}
       {showCreate && (
         <>
           <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px] transition-opacity" onClick={() => setShowCreate(false)} />
           <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white shadow-2xl flex flex-col justify-between animate-slideLeft">
-            
+
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
                 <h2 className="text-base font-serif font-bold text-[#001E3D]">Novo Chamado de Suporte</h2>
@@ -505,7 +513,7 @@ export default function TicketsPage() {
                 <X size={16} />
               </button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -561,9 +569,9 @@ export default function TicketsPage() {
               <button className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold hover:bg-white text-slate-500 transition-colors" onClick={() => setShowCreate(false)}>
                 Cancelar
               </button>
-              <button 
-                className="bg-[#001E3D] text-white px-5 py-2 rounded-xl text-xs font-semibold hover:bg-[#002d5c] disabled:opacity-50 transition-colors shadow-xs" 
-                onClick={() => createMutation.mutate()} 
+              <button
+                className="bg-[#001E3D] text-white px-5 py-2 rounded-xl text-xs font-semibold hover:bg-[#002d5c] disabled:opacity-50 transition-colors shadow-xs"
+                onClick={() => createMutation.mutate(form)}
                 disabled={createMutation.isPending || !form.subject || !form.message}
               >
                 {createMutation.isPending ? 'Enviando...' : 'Criar Chamado'}

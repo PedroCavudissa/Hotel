@@ -24,6 +24,7 @@ const Quartos            = lazy(() => import('@/components/layout/Catalog'))
 const Contacto           = lazy(() => import('@/components/layout/Contacto'))
 const VerifyEmailPage    = lazy(() => import('@/pages/auth/VerifyEmailPage'))
 const ForgotPassword   = lazy(() => import('@/pages/auth/ResetPasswordPage'))
+const LegalPage            = lazy(() => import('@/components/layout/LegalPage'))
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 1000 } },
 })
@@ -39,6 +40,7 @@ export default function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/quartos" element={<Quartos />} />
               <Route path="/contacto" element={<Contacto />} />
+              <Route path="/legal" element={<LegalPage />} />
             </Route>
 
             {/* Rotas de autenticação SEM menu - Acessíveis sem login */}

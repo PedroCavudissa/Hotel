@@ -20,7 +20,7 @@ interface Settings {
 export default function PaymentSettingsPage() {
   const qc = useQueryClient()
   const { user } = useAuthStore() // Obtendo o usuário logado
-  
+
   // Regra de permissão: Apenas ADMIN pode alterar. RECEPTION (Recepcionista) apenas visualiza.
   const isAdmin = user?.role === 'ADMIN'
 
@@ -59,7 +59,7 @@ export default function PaymentSettingsPage() {
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
-    
+
     if (form.paymentHoldMinutes && form.paymentHoldMinutes < 0) {
       newErrors.paymentHoldMinutes = 'Valor não pode ser negativo'
     }
@@ -69,7 +69,7 @@ export default function PaymentSettingsPage() {
     if (form.minCancellationFee && form.minCancellationFee < 0) {
       newErrors.minCancellationFee = 'Valor não pode ser negativo'
     }
-    
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -88,17 +88,17 @@ export default function PaymentSettingsPage() {
 
   return (
     <div className="space-y-6 p-6">
-  
+
 
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-stone-800">Configurações de Pagamento</h1>
           <p className="text-sm text-stone-500 mt-1">Gerencie as regras de cancelamento e check-out</p>
         </div>
-        
+
         {/* O botão só renderiza ou fica ativo se for Admin */}
         {isAdmin && (
-          <button 
+          <button
             onClick={handleSubmit}
             disabled={updateMutation.isPending}
             className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 shadow-sm"
@@ -112,7 +112,7 @@ export default function PaymentSettingsPage() {
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
+
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1">
                 Minutos para retenção de pagamento

@@ -108,22 +108,38 @@ export interface Policy {
   createdAt: string
 }
 
-// ─── Reports ─────────────────────────────────────────────
+// Report types
 export interface OccupancyReport {
-  date: string
-  totalRooms: number
-  occupiedRooms: number
+  period: string
+  start: string
+  end: string
+  roomsCount: number
+  activeReservations: number
   occupancyRate: number
-  availableRooms: number
+  reservationsCount: number
+  revenue: number
+  predictedRevenue: number
 }
 
 export interface FinancialReport {
-  date: string
+  period: string
+  start: string
+  end: string
+  roomsCount: number
+  activeReservations: number
+  occupancyRate: number
+  reservationsCount: number
   revenue: number
-  reservations: number
-  avgRoomRate: number
+  predictedRevenue: number
 }
 
+// Para compatibilidade com o gráfico, vamos criar uma estrutura de série temporal
+export interface DailyReportData {
+  date: string
+  revenue: number
+  occupancyRate: number
+  reservationsCount: number
+}
 // ─── Pagination ──────────────────────────────────────────
 export interface PaginatedResponse<T> {
   data: T[]

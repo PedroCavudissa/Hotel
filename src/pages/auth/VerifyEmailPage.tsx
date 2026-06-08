@@ -8,7 +8,7 @@ export default function VerifyEmailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const email = location.state?.email || localStorage.getItem('email_verificacao') || ''
-  
+
   const [code, setCode] = useState(['', '', '', '', '', ''])
   const [loading, setLoading] = useState(false)
   const [resendLoading, setResendLoading] = useState(false)
@@ -41,17 +41,17 @@ export default function VerifyEmailPage() {
   const handleCodeChange = (index: number, value: string) => {
     if (value.length > 1) return
     if (!/^\d*$/.test(value)) return
-    
+
     const newCode = [...code]
     newCode[index] = value
     setCode(newCode)
-    
+
     // Auto-focus next input
     if (value && index < 5) {
       const nextInput = document.getElementById(`code-${index + 1}`)
       nextInput?.focus()
     }
-    
+
     // Clear error when typing
     if (error) setError('')
   }
@@ -72,13 +72,13 @@ export default function VerifyEmailPage() {
 
     setLoading(true)
     setError('')
-    
+
     try {
       await authApi.verifyEmail(email, verificationCode)
       setVerificationSuccess(true)
       localStorage.removeItem('email_verificacao')
       toast.success('Email verificado com sucesso!')
-      
+
       setTimeout(() => {
         navigate('/auth/login')
       }, 2000)
@@ -95,7 +95,7 @@ export default function VerifyEmailPage() {
 
   const handleResendCode = async () => {
     if (!canResend) return
-    
+
     setResendLoading(true)
     try {
       await authApi.resendVerificationCode(email)
@@ -173,11 +173,10 @@ export default function VerifyEmailPage() {
                     value={digit}
                     onChange={(e) => handleCodeChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
-                    className={`w-12 h-14 text-center text-xl font-bold rounded-xl border ${
-                      error 
-                        ? 'border-red-500 focus:border-red-500' 
+                    className={`w-12 h-14 text-center text-xl font-bold rounded-xl border ${error
+                        ? 'border-red-500 focus:border-red-500'
                         : 'border-slate-200 focus:border-[#001E3D]'
-                    } bg-white focus:outline-none focus:ring-1 focus:ring-[#001E3D] transition-all shadow-sm`}
+                      } bg-white focus:outline-none focus:ring-1 focus:ring-[#001E3D] transition-all shadow-sm`}
                     disabled={loading}
                   />
                 ))}
@@ -211,10 +210,10 @@ export default function VerifyEmailPage() {
                 className="text-sm text-[#001E3D] hover:text-[#002d5c] font-medium flex items-center justify-center gap-2 mx-auto disabled:opacity-50"
               >
                 <RefreshCw size={14} className={resendLoading ? 'animate-spin' : ''} />
-                {resendLoading 
-                  ? 'A enviar...' 
-                  : !canResend 
-                    ? `Reenviar em ${timeLeft}s` 
+                {resendLoading
+                  ? 'A enviar...'
+                  : !canResend
+                    ? `Reenviar em ${timeLeft}s`
                     : 'Reenviar código'}
               </button>
             </div>

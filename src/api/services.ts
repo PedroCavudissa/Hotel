@@ -3,7 +3,7 @@ import type {
   LoginPayload, RegisterPayload, AuthResponse,
   User, Room, CreateRoomPayload, Amenity,
   Reservation, CreateReservationPayload,
-  Ticket, Policy, OccupancyReport, FinancialReport,
+   Policy, OccupancyReport, FinancialReport,
 } from '@/types'
 
 // ─── Auth ────────────────────────────────────────────────
@@ -30,23 +30,57 @@ export const usersApi = {
 
 // ─── Rooms ───────────────────────────────────────────────
 export const roomsApi = {
-  list:             ()                 => api.get<Room[]>('/rooms'),
-  create:           (d: CreateRoomPayload) => {
+  list: () => api.get<Room[]>('/rooms'),
+  
+  getById: (id: string) => api.get<Room>(`/rooms/${id}`),
+  
+  create: (data: any) => {
     const fd = new FormData()
-    Object.entries(d).forEach(([k, v]) => {
-      if (v !== undefined) {
-        if (k === 'amenityIds' && Array.isArray(v)) v.forEach((id) => fd.append('amenityIds[]', id))
-        else fd.append(k, v as string | Blob)
+    Object.entries(data).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) {
+        if (k === 'amenityIds' && Array.isArray(v)) {
+          v.forEach((id) => fd.append('amenityIds[]', id))
+        } else {
+          fd.append(k, v as string | Blob)
+        }
       }
     })
-    return api.post<Room>('/rooms', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    return api.post<Room>('/rooms', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
   },
-  delete:           (id: string)       => api.delete(`/rooms/${id}`),
-  startCleaning:    (id: string)       => api.patch(`/rooms/${id}/cleaning/start`),
-  finishCleaning:   (id: string)       => api.patch(`/rooms/${id}/cleaning/finish`),
-  inspect:          (id: string)       => api.patch(`/rooms/${id}/inspect`),
-  startMaintenance: (id: string, type: 'OOO' | 'OOS') => api.patch(`/rooms/${id}/maintenance/start`, { type }),
-  finishMaintenance:(id: string)       => api.patch(`/rooms/${id}/maintenance/finish`),
+  
+  update: (id: string, data: any) => {
+    const fd = new FormData()
+    Object.entries(data).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) {
+        if (k === 'amenityIds' && Array.isArray(v)) {
+          v.forEach((id) => fd.append('amenityIds[]', id))
+        } else {
+          fd.append(k, v as string | Blob)
+        }
+      }
+    })
+    return api.patch<Room>(`/rooms/${id}`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  
+  delete: (id: string) => api.delete(`/rooms/${id}`),
+  
+  startCleaning: (id: string) => api.patch(`/rooms/${id}/cleaning/start`),
+  
+  finishCleaning: (id: string) => api.patch(`/rooms/${id}/cleaning/finish`),
+  
+  inspect: (id: string) => api.patch(`/rooms/${id}/inspect`),
+  
+  startMaintenance: (id: string, type: 'OUT_OF_ORDER' | 'OUT_OF_SERVICE') => 
+    api.patch(`/rooms/${id}/maintenance/start`, { type }),
+  
+  finishMaintenance: (id: string) => api.patch(`/rooms/${id}/maintenance/finish`),
+  
+  changeStatus: (id: string, status: string) => 
+    api.patch(`/rooms/${id}/status`, { state: status }),
 }
 
 // ─── Amenities ───────────────────────────────────────────
@@ -57,18 +91,30 @@ export const amenitiesApi = {
   delete: (id: string)                 => api.delete(`/amenities/${id}`),
 }
 
-// ─── Reservations ────────────────────────────────────────
-// ─── Reservations ────────────────────────────────────────
+
+// ─── Reservas ────────────────────────────────────────
 export const reservationsApi = {
-  list:     ()                                      => api.get<Reservation[]>('/reservations'),
-  getMine:  ()                                      => api.get<Reservation[]>('/reservations/mine'),
-  create:   (d: CreateReservationPayload)           => api.post<Reservation>('/reservations', d),
-  getById:  (id: string)                            => api.get<Reservation>(`/reservations/${id}`),
-  update:   (id: string, d: Partial<Reservation>)  => api.put<Reservation>(`/reservations/${id}`, d),
-  cancel:   (id: string)                            => api.delete(`/reservations/${id}`),
-  pay:      (id: string, method: string)            => api.patch(`/reservations/${id}/pay`, { method }),
-  checkIn:  (id: string)                            => api.patch(`/reservations/${id}/checkin`),
-  checkOut: (id: string)                            => api.patch(`/reservations/${id}/checkout`),
+  list: () => api.get<Reservation[]>('/reservations'),
+  getMine: () => api.get<Reservation[]>('/reservations/mine'),
+  create: (d: CreateReservationPayload) => api.post<Reservation>('/reservations', d),
+  getById: (id: string) => api.get<Reservation>(`/reservations/${id}`),
+  update: (id: string, d: Partial<Reservation>) => api.patch<Reservation>(`/reservations/${id}`, d),
+  
+  // Cancelar com motivo
+  cancel: (id: string, reason: string) => api.patch(`/reservations/${id}/cancel`, { reason }),
+  
+  // Remarcar reserva
+  reschedule: (id: string, data: { checkIn: string; checkOut: string; reason?: string }) => 
+    api.patch(`/reservations/${id}/reschedule`, data),
+  
+  // Pagamento
+  pay: (id: string, method: string) => api.patch(`/reservations/${id}/pay`, { method }),
+  
+  // Check-in/Check-out
+  checkIn: (id: string) => api.patch(`/reservations/${id}/checkin`),
+  checkOut: (id: string) => api.patch(`/reservations/${id}/checkout`),
+  
+  // Upload comprovativo
   uploadPaymentProof: (id: string, file: File) => {
     const formData = new FormData()
     formData.append('proof', file)
@@ -149,7 +195,11 @@ export const policiesApi = {
 }
 
 // ─── Reports ─────────────────────────────────────────────
+
 export const reportsApi = {
-  occupancy: (params?: { startDate?: string; endDate?: string }) => api.get<OccupancyReport[]>('/reports/occupancy', { params }),
-  financial:  (params?: { startDate?: string; endDate?: string }) => api.get<FinancialReport[]>('/reports/financial', { params }),
+  getOccupancyReport: () => 
+    api.get<OccupancyReport>('/reports/occupancy'),
+    
+  getFinancialReport: () => 
+    api.get<FinancialReport>('/reports/financial'),
 }

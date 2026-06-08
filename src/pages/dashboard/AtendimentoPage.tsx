@@ -21,12 +21,12 @@ export default function AtendimentoPage() {
   if (roomsLoading || resLoading) return <PageSpinner />
 
   const today = new Date().toISOString().split('T')[0]
-  
-  const todayCheckIns = reservations.filter(r => 
+
+  const todayCheckIns = reservations.filter(r =>
     r.status === 'confirmed' && r.checkIn?.split('T')[0] === today
   ).length
-  
-  const todayCheckOuts = reservations.filter(r => 
+
+  const todayCheckOuts = reservations.filter(r =>
     r.status === 'checked_in' && r.checkOut?.split('T')[0] === today
   ).length
 
@@ -118,13 +118,13 @@ export default function AtendimentoPage() {
               <div key={room.id} className={cn(
                 'p-3 rounded-xl text-center border transition-all',
                 room.state === 'VACANT_CLEAN' ? 'bg-emerald-50 border-emerald-200' :
-                room.state === 'OCCUPIED' ? 'bg-blue-50 border-blue-200' :
-                'bg-yellow-50 border-yellow-200'
+                  room.state === 'OCCUPIED' ? 'bg-blue-50 border-blue-200' :
+                    'bg-yellow-50 border-yellow-200'
               )}>
                 <p className="font-bold text-sm">#{room.number}</p>
                 <p className="text-[10px] font-medium mt-1">
                   {room.state === 'VACANT_CLEAN' ? 'Disponível' :
-                   room.state === 'OCCUPIED' ? 'Ocupado' : 'Sujo'}
+                    room.state === 'OCCUPIED' ? 'Ocupado' : 'Sujo'}
                 </p>
               </div>
             ))}

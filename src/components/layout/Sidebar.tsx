@@ -31,13 +31,13 @@ const nav: NavItem[] = [
   
   // ADMIN e RECEPTION
   { to: '/rooms', icon: BedDouble, label: 'Quartos', roles: ['ADMIN', 'RECEPTION'] },
-  { to: '/reservations', icon: CalendarCheck2, label: 'Reservas', roles: ['ADMIN', 'RECEPTION'] },
-  { to: '/atendimento', icon: LogIn, label: 'Atendimento', roles: ['ADMIN', 'RECEPTION'] },
+  { to: '/reservations', icon: CalendarCheck2, label: 'Reservas', roles: ['ADMIN', 'RECEPTION','CLIENT'] },
+
   { to: '/tickets', icon: Ticket, label: 'Tickets', roles: ['ADMIN', 'RECEPTION'] },
   { to: '/policies', icon: ScrollText, label: 'Políticas', roles: ['ADMIN', 'RECEPTION'] },
   
   // CLIENT
-  { to: '/minhas-reservas', icon: CalendarCheck2, label: 'Minhas Reservas', roles: ['CLIENT'] },
+ 
   { to: '/cliente/quartos', icon: BedDouble, label: 'Quartos', roles: ['CLIENT'] },
   { to: '/tickets', icon: Ticket, label: 'Meus Tickets', roles: ['CLIENT'] },
   

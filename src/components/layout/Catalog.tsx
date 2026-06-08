@@ -1,12 +1,10 @@
-// src/pages/public/Catalog.tsx
 import { useState, useEffect } from "react";
 import { SlidersHorizontal, Users, MapPin, Wifi, Tv, Wind, Coffee } from "lucide-react";
 import { roomsApi } from "@/api/services";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
-import useAuthStore from "@/store/authStore"; // IMPORTANTE: importar o auth store
+import useAuthStore from "@/store/authStore";
 
-// Interface baseada na resposta real da API
 interface Amenity {
   id: string;
   name: string;
@@ -33,9 +31,10 @@ interface Room {
 
 export default function Catalog() {
   const navigate = useNavigate();
-  const { user } = useAuthStore(); // PEGA O USUÁRIO LOGADO
+  const { user } = useAuthStore();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [activeFilter, setActiveFilter] = useState("Todos");
+  const [minCapacity, setMinCapacity] = useState<number>(0); // 0 significa qualquer capacidade
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -56,7 +55,7 @@ export default function Catalog() {
         roomsData = response.data.content;
       }
       
-      // FILTRA APENAS QUARTOS COM STATE = VACANT_CLEAN
+      // FILTRA APENAS QUARTOS DISPONÍVEIS E PRONTOS
       const availableRooms = roomsData.filter(room => room.state === 'VACANT_CLEAN');
       
       setRooms(availableRooms);
@@ -70,10 +69,8 @@ export default function Catalog() {
 
   const handleReserveClick = (room: Room) => {
     if (user) {
-      // CLIENT logado - vai para página de reserva dentro da área logada
       navigate(`/reservations?roomId=${room.id}`);
     } else {
-      // Visitante - salva e vai para login
       localStorage.setItem('selectedRoom', JSON.stringify({
         id: room.id,
         number: room.number,
@@ -86,18 +83,16 @@ export default function Catalog() {
     }
   };
 
-  // Categorias baseadas apenas nos quartos disponíveis
+  // Categorias únicas baseadas nos tipos reais da API (Garante consistência)
   const categorias = ["Todos", ...Array.from(new Set(rooms.map((room) => room.type)))];
 
-  const handleFilterChange = (cat: string) => {
-    setActiveFilter(cat);
-  };
+  // APLICANDO OS FILTROS COMBINADOS (Tipo + Capacidade Mínima)
+  const quartosFiltrados = rooms.filter((room) => {
+    const matchesType = activeFilter === "Todos" || room.type === activeFilter;
+    const matchesCapacity = minCapacity === 0 || room.capacity >= minCapacity;
+    return matchesType && matchesCapacity;
+  });
 
-  const quartosFiltrados = activeFilter === "Todos"
-    ? rooms
-    : rooms.filter((room) => room.type === activeFilter);
-
-  // Função para formatar preço
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-AO', {
       style: 'currency',
@@ -107,16 +102,13 @@ export default function Catalog() {
     }).format(price).replace('AOA', 'Kz');
   };
 
-  // Função para obter imagem válida
   const getValidImageUrl = (room: Room) => {
     if (room.imageUrl && room.imageUrl !== 'string' && room.imageUrl.startsWith('http')) {
       return room.imageUrl;
     }
-    // Fallback apenas para imagens inválidas
     return `https://placehold.co/600x400/001E3D/white?text=Quarto+${room.number}`;
   };
 
-  // Função para obter ícone da comodidade
   const getAmenityIcon = (name: string) => {
     const lowerName = name.toLowerCase();
     if (lowerName.includes('wifi')) return <Wifi size={10} />;
@@ -127,7 +119,7 @@ export default function Catalog() {
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full bg-slate-50/50 min-h-screen pb-16">
       {/* BANNER DE TÍTULO */}
       <div className="bg-[#001E3D] text-white py-16 px-6 border-b border-white/5">
         <div className="max-w-7xl mx-auto space-y-3">
@@ -139,48 +131,76 @@ export default function Catalog() {
         </div>
       </div>
 
-      {/* BARRA DE FILTROS - Só mostra se houver quartos */}
+      {/* BARRA DE FILTROS AVANÇADA */}
       {rooms.length > 0 && (
         <div className="max-w-7xl mx-auto px-6 -mt-7 relative z-10">
-          <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/60 p-3 flex items-center gap-3 overflow-x-auto no-scrollbar border border-slate-100">
-            <div className="p-2.5 text-slate-400 border-r border-slate-100 hidden sm:block">
-              <SlidersHorizontal size={18} />
+          <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-slate-100">
+            {/* Filtro por Categoria de Quarto */}
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1">
+              <div className="p-2 text-slate-400 border-r border-slate-100 hidden sm:block">
+                <SlidersHorizontal size={16} />
+              </div>
+              <div className="flex gap-1.5">
+                {categorias.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveFilter(cat)}
+                    className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all whitespace-nowrap ${
+                      activeFilter === cat 
+                        ? "bg-[#001E3D] text-white shadow-md shadow-blue-950/20" 
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex gap-2">
-              {categorias.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => handleFilterChange(cat)}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all whitespace-nowrap ${
-                    activeFilter === cat 
-                      ? "bg-[#001E3D] text-white shadow-md shadow-blue-950/20" 
-                      : "text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
+
+            {/* Filtro por Capacidade (Hóspedes) */}
+            <div className="flex items-center gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
+              <span className="text-xs font-medium text-slate-400 flex items-center gap-1 whitespace-nowrap">
+                <Users size={14} /> Hóspedes:
+              </span>
+              <select
+                value={minCapacity}
+                onChange={(e) => setMinCapacity(Number(e.target.value))}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-amber-500"
+              >
+                <option value={0}>Qualquer número</option>
+                <option value={1}>1 Pessoa</option>
+                <option value={2}>2 Pessoas</option>
+                <option value={3}>3+ Pessoas</option>
+              </select>
             </div>
           </div>
         </div>
       )}
 
       {/* GRID DE QUARTOS */}
-      <div className="max-w-7xl mx-auto px-6 py-16">
+      <div className="max-w-7xl mx-auto px-6 mt-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {loading ? (
             Array(3).fill(0).map((_, idx) => <RoomCardSkeleton key={idx} />)
           ) : quartosFiltrados.length === 0 ? (
-            <div className="col-span-full text-center py-12">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-slate-100 rounded-full mb-4">
-                <SlidersHorizontal size={24} className="text-slate-400" />
+            <div className="col-span-full text-center py-16 bg-white rounded-3xl border border-slate-100 p-8 shadow-xs">
+              <div className="inline-flex items-center justify-center w-14 h-14 bg-amber-50 rounded-full mb-4 text-amber-600">
+                <SlidersHorizontal size={20} />
               </div>
-              <p className="text-slate-500 font-medium">Nenhum quarto disponível no momento.</p>
-              <p className="text-slate-400 text-sm mt-1">Volte mais tarde para ver novas disponibilidades.</p>
+              <p className="text-slate-700 font-medium text-base">Nenhum quarto corresponde aos filtros selecionados.</p>
+              <p className="text-slate-400 text-sm mt-1">Tente alterar a categoria ou reduzir o número de hóspedes procurado.</p>
+              {(activeFilter !== "Todos" || minCapacity !== 0) && (
+                <button
+                  onClick={() => { setActiveFilter("Todos"); setMinCapacity(0); }}
+                  className="mt-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+                >
+                  Limpar Filtros
+                </button>
+              )}
             </div>
           ) : (
             quartosFiltrados.map((quarto) => (
-              <div key={quarto.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-md transition-all group flex flex-col justify-between">
+              <div key={quarto.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-xs hover:shadow-md transition-all group flex flex-col justify-between">
                 <div>
                   <div className="relative overflow-hidden aspect-[4/3] m-3 rounded-2xl bg-slate-100">
                     <img 
@@ -253,7 +273,6 @@ export default function Catalog() {
   );
 }
 
-// Componente Skeleton para loading
 function RoomCardSkeleton() {
   return (
     <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden animate-pulse">

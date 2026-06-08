@@ -22,7 +22,7 @@ export default function Topbar({ title }: TopbarProps) {
 
       <div className="ml-auto flex items-center gap-3">
         <button className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
-          <Bell size={18} className="text-stone-500" />
+       
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-gold-500 rounded-full" />
         </button>
         <div className="w-8 h-8 rounded-full bg-stone-900 flex items-center justify-center text-white text-sm font-semibold">

@@ -20,7 +20,7 @@ export default function ResetPasswordPage() {
     // Extrair token da URL
     const params = new URLSearchParams(location.search);
     const tokenParam = params.get("token");
-    
+
     if (tokenParam) {
       setToken(tokenParam);
     } else {
@@ -31,36 +31,36 @@ export default function ResetPasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validações
     if (!password || !confirmPassword) {
       toast.error("Preencha todos os campos");
       return;
     }
-    
+
     if (password.length < 8) {
       toast.error("A senha deve ter pelo menos 8 caracteres");
       return;
     }
-    
+
     if (password !== confirmPassword) {
       toast.error("As senhas não coincidem");
       return;
     }
-    
+
     setLoading(true);
-    
+
     try {
       await authApi.resetPassword({ token, password });
-      
+
       setSuccess(true);
       toast.success("Senha alterada com sucesso!");
-      
+
       // Redirecionar para o login após 3 segundos
       setTimeout(() => {
         navigate("/login");
       }, 3000);
-      
+
     } catch (error: any) {
       console.error("Erro ao redefinir senha:", error);
       const message = error.response?.data?.message || "Token inválido ou expirado. Solicite um novo link.";
