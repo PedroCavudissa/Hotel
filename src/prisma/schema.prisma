@@ -47,6 +47,8 @@ enum ReservationStatus {
   CANCELLED
   COMPLETED
   EXPIRED
+  CHECKED_IN
+  
 }
 
 enum PaymentStatus {
@@ -56,6 +58,7 @@ enum PaymentStatus {
   CANCELLED
   REFUNDED
 }
+
 
 
 

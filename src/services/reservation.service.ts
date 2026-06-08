@@ -1,4 +1,5 @@
 import { prisma } from "../prisma/client.js";
+import { ReservationStatus, PaymentStatus } from "@prisma/client"; // Enums do Prisma protegidos
 import { EmailService } from "./email.service.js";
 
 type AuthUser = {
@@ -79,11 +80,11 @@ export class ReservationService {
         checkIn: { lt: checkOut },
         checkOut: { gt: checkIn },
         OR: [
-          { status: "CONFIRMED" },
-          { status: "CHECKED_IN" },
+          { status: ReservationStatus.CONFIRMED },
+          { status: ReservationStatus.CHECKED_IN },
           {
-            status: "PENDING",
-            paymentStatus: "PENDING",
+            status: ReservationStatus.PENDING,
+            paymentStatus: PaymentStatus.PENDING,
             expiresAt: { gt: now },
           },
         ],
@@ -104,11 +105,11 @@ export class ReservationService {
         checkIn: { lt: checkOut },
         checkOut: { gt: checkIn },
         OR: [
-          { status: "CONFIRMED" },
-          { status: "CHECKED_IN" },
+          { status: ReservationStatus.CONFIRMED },
+          { status: ReservationStatus.CHECKED_IN },
           {
-            status: "PENDING",
-            paymentStatus: "PENDING",
+            status: ReservationStatus.PENDING,
+            paymentStatus: PaymentStatus.PENDING,
             expiresAt: { gt: now },
           },
         ],
@@ -189,13 +190,13 @@ export class ReservationService {
     const existingGuest = await prisma.guest.findUnique({ where: { userId } });
 
     const guestData = {
-      name: guestInput?.name ?? user.name,
-      email: guestInput?.email ?? user.email,
-      phone: guestInput?.phone ?? existingGuest?.phone,
-      idDocument: guestInput?.idDocument ?? existingGuest?.idDocument,
-      province: guestInput?.province ?? existingGuest?.province,
-      country: guestInput?.country ?? existingGuest?.country,
-      isForeigner: guestInput?.isForeigner !== undefined ? Boolean(guestInput.isForeigner) : (existingGuest?.isForeigner ?? false),
+      name: guestInput?.name || user.name,
+      email: guestInput?.email || user.email,
+      phone: guestInput?.phone || existingGuest?.phone || user.phone,
+      idDocument: guestInput?.idDocument || existingGuest?.idDocument || user.idDocument,
+      province: guestInput?.province || existingGuest?.province || user.province,
+      country: guestInput?.country || existingGuest?.country || user.country,
+      isForeigner: guestInput?.isForeigner !== undefined ? Boolean(guestInput.isForeigner) : (existingGuest?.isForeigner || user.isForeigner || false),
     };
 
     this.validateGuestData(guestData, false);
@@ -227,11 +228,11 @@ export class ReservationService {
     return prisma.guest.create({
       data: {
         name: data.name,
-        email: data.email,
-        phone: data.phone,
+        email: data.email || null,
+        phone: data.phone || null,
         idDocument: data.idDocument,
-        province: data.province,
-        country: data.country,
+        province: data.province || null,
+        country: data.country || null,
         isForeigner: Boolean(data.isForeigner),
         verifiedByStaff: true,
         createdById: staffId,
@@ -239,6 +240,7 @@ export class ReservationService {
     });
   }
 
+  // 1. CRIAR RESERVA: O Quarto NÃO fica ocupado aqui. Continua VACANT_CLEAN
   static async create(data: any, actor: AuthUser) {
     const checkIn = this.parseDate(data.checkIn, "checkIn");
     const checkOut = this.parseDate(data.checkOut, "checkOut");
@@ -248,13 +250,15 @@ export class ReservationService {
 
     const isStaff = ["ADMIN", "MANAGER", "RECEPTION"].includes(actor.role);
     let guest;
-    let userId: string | undefined;
+    let userId: string | null = null;
 
-    if (isStaff && data.guest) {
+    if (data.guest) {
       guest = await this.createWalkInGuest(data.guest, actor.id);
+      userId = isStaff && data.userId ? data.userId : null;
     } else {
-      userId = isStaff && data.userId ? data.userId : actor.id;
-      guest = await this.upsertGuestForUser(userId, data.guest ?? data);
+      const targetUserId = isStaff && data.userId ? data.userId : actor.id;
+      guest = await this.upsertGuestForUser(targetUserId, data);
+      userId = targetUserId;
     }
 
     const reservation = await prisma.reservation.create({
@@ -265,8 +269,8 @@ export class ReservationService {
         checkIn,
         checkOut,
         totalPrice: room.pricePerNight * nights,
-        status: "PENDING",
-        paymentStatus: "PENDING",
+        status: ReservationStatus.PENDING,
+        paymentStatus: PaymentStatus.PENDING,
         expiresAt: new Date(Date.now() + policy.paymentHoldMinutes * 60 * 1000),
         createdById: isStaff ? actor.id : undefined,
         externalPlatform: data.externalPlatform,
@@ -284,10 +288,10 @@ export class ReservationService {
     if (filters.status) where.status = filters.status;
     if (filters.paymentStatus) where.paymentStatus = filters.paymentStatus;
     if (filters.active === "true") {
-      where.status = { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] };
+      where.status = { in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED, ReservationStatus.CHECKED_IN] };
     }
     if (filters.history === "true") {
-      where.status = { in: ["COMPLETED", "CANCELLED", "EXPIRED"] };
+      where.status = { in: [ReservationStatus.COMPLETED, ReservationStatus.CANCELLED, ReservationStatus.EXPIRED] };
     }
 
     return prisma.reservation.findMany({
@@ -331,7 +335,7 @@ export class ReservationService {
 
     if (!reservation) throw new AppError("Reserva nao encontrada", 404);
 
-    if (["COMPLETED", "CANCELLED", "EXPIRED"].includes(reservation.status)) {
+    if ([ReservationStatus.COMPLETED, ReservationStatus.CANCELLED, ReservationStatus.EXPIRED].includes(reservation.status)) {
       throw new AppError("Esta reserva ja nao pode ser alterada", 409);
     }
 
@@ -370,8 +374,8 @@ export class ReservationService {
         checkIn,
         checkOut,
         totalPrice: newTotalPrice,
-        status: needsAdditionalPayment ? "PENDING" : reservation.status,
-        paymentStatus: needsAdditionalPayment ? "PENDING" : reservation.paymentStatus,
+        status: needsAdditionalPayment ? ReservationStatus.PENDING : reservation.status,
+        paymentStatus: needsAdditionalPayment ? PaymentStatus.PENDING : reservation.paymentStatus,
         expiresAt: needsAdditionalPayment
           ? new Date(Date.now() + policy.paymentHoldMinutes * 60 * 1000)
           : reservation.expiresAt,
@@ -396,7 +400,7 @@ export class ReservationService {
     });
     
     if (!reservation) throw new AppError("Reserva nao encontrada", 404);
-    if (["COMPLETED", "CANCELLED", "EXPIRED"].includes(reservation.status)) {
+    if ([ReservationStatus.COMPLETED, ReservationStatus.CANCELLED, ReservationStatus.EXPIRED].includes(reservation.status)) {
       throw new AppError("Esta reserva ja esta encerrada", 409);
     }
 
@@ -409,6 +413,7 @@ export class ReservationService {
       : 0;
     const refundAmount = Math.max(paidAmount - cancellationFee, 0);
 
+    // Se a reserva for cancelada, garantimos que o quarto fica VACANT_CLEAN
     await prisma.room.update({
       where: { id: reservation.roomId },
       data: { 
@@ -420,8 +425,8 @@ export class ReservationService {
     const updatedReservation = await prisma.reservation.update({
       where: { id },
       data: {
-        status: "CANCELLED",
-        paymentStatus: "CANCELLED",
+        status: ReservationStatus.CANCELLED,
+        paymentStatus: PaymentStatus.CANCELLED,
         cancellationReason: reason.trim(),
         cancellationFee,
         refundAmount,
@@ -444,7 +449,7 @@ export class ReservationService {
   static async delete(id: string) {
     const reservation = await prisma.reservation.findUnique({ where: { id } });
     if (!reservation) throw new AppError("Reserva nao encontrada", 404);
-    if (!["COMPLETED", "CANCELLED", "EXPIRED"].includes(reservation.status)) {
+    if (![ReservationStatus.COMPLETED, ReservationStatus.CANCELLED, ReservationStatus.EXPIRED].includes(reservation.status)) {
       throw new AppError("Reservas ativas nao podem ser eliminadas", 409);
     }
 
@@ -452,6 +457,7 @@ export class ReservationService {
     return { message: "Reserva eliminada com sucesso" };
   }
 
+  // 2. CONFIRMAR PAGAMENTO: Passa a reserva para CONFIRMED. O quarto MANTÉM-SE livre (VACANT_CLEAN)
   static async confirmPayment(id: string, method: string, amountPaid?: number) {
     const reservation = await prisma.reservation.findUnique({
       where: { id },
@@ -460,7 +466,7 @@ export class ReservationService {
 
     if (!reservation) throw new AppError("Reserva nao encontrada", 404);
     
-    if (reservation.status === "EXPIRED" || (reservation.expiresAt && reservation.expiresAt < new Date())) {
+    if (reservation.status === ReservationStatus.EXPIRED || (reservation.expiresAt && reservation.expiresAt < new Date())) {
       throw new AppError("Reserva expirada. E necessario refazer a reserva", 410);
     }
 
@@ -474,8 +480,8 @@ export class ReservationService {
       where: { id },
       data: {
         amountPaid: finalAmountPaid,
-        paymentStatus: isFullyPaid ? "PAID" : "PENDING",
-        status: isFullyPaid ? "CONFIRMED" : "PENDING",
+        paymentStatus: isFullyPaid ? PaymentStatus.PAID : PaymentStatus.PENDING,
+        status: isFullyPaid ? ReservationStatus.CONFIRMED : ReservationStatus.PENDING, // Passa a CONFIRMED aqui
         paymentMethod: method,
         expiresAt: isFullyPaid ? null : reservation.expiresAt,
       },
@@ -503,7 +509,7 @@ export class ReservationService {
   static async expireOldReservations() {
     const expiredReservations = await prisma.reservation.findMany({
       where: {
-        paymentStatus: "PENDING",
+        paymentStatus: PaymentStatus.PENDING,
         expiresAt: { lt: new Date() },
       },
     });
@@ -511,13 +517,13 @@ export class ReservationService {
     let count = 0;
     for (const res of expiredReservations) {
       const paid = res.amountPaid ?? 0;
-      const refund = paid; // Retém o montante anteriormente consolidado para auditoria/reembolso manual
+      const refund = paid;
 
       await prisma.reservation.update({
         where: { id: res.id },
         data: {
-          status: "EXPIRED",
-          paymentStatus: "CANCELLED",
+          status: ReservationStatus.EXPIRED,
+          paymentStatus: PaymentStatus.CANCELLED,
           refundAmount: refund,
           cancellationReason: paid > 0 
             ? "Expirou automaticamente por falta de pagamento do valor adicional após reajuste."
@@ -535,7 +541,7 @@ export class ReservationService {
 
     return { expiredCount: count };
   }
-
+// 3. FAZER CHECK-IN: Único sítio onde a Reserva passa a CHECKED_IN e o Quarto passa a OCCUPIED!
   static async checkIn(reservationId: string) {
     const now = new Date();
 
@@ -545,14 +551,14 @@ export class ReservationService {
     });
 
     if (!reservation) throw new AppError("Reserva nao encontrada", 404);
-    if (reservation.paymentStatus !== "PAID") {
+    if (reservation.paymentStatus !== PaymentStatus.PAID) {
       throw new AppError("Pagamento ainda nao confirmado integralmente", 403);
     }
     if (reservation.expiresAt && reservation.expiresAt < now) {
       throw new AppError("Reserva expirada. E necessario refazer a reserva", 410);
     }
-    if (reservation.status !== "CONFIRMED") {
-      throw new AppError("Reserva ainda nao confirmada", 409);
+    if (reservation.status !== ReservationStatus.CONFIRMED) {
+      throw new AppError("A reserva precisa estar CONFIRMED para fazer o check-in", 409);
     }
     if (reservation.checkInReal) {
       throw new AppError("Check-in ja realizado", 409);
@@ -561,25 +567,30 @@ export class ReservationService {
       throw new AppError("Check-in permitido apenas no dia agendado", 403);
     }
     if (reservation.room.state !== "VACANT_CLEAN") {
-      throw new AppError("Quarto ainda nao esta pronto para entrada", 409);
+      throw new AppError("Quarto ainda nao esta pronto para entrada (Precisa estar livre e limpo)", 409);
     }
 
+    // 1. Atualiza o QUARTO para OCCUPIED (Ocupado fisicamente)
     await prisma.room.update({
       where: { id: reservation.roomId },
       data: { state: "OCCUPIED" },
     });
 
-    await prisma.reservation.update({
+    // 2. Atualiza a RESERVA para CHECKED_IN (Garante a mudança de status na BD)
+    const updatedReservation = await prisma.reservation.update({
       where: { id: reservationId },
-      data: { checkInReal: now, status: "CHECKED_IN" },
-    });
-
-    return prisma.reservation.findUnique({
-      where: { id: reservationId },
+      data: { 
+        checkInReal: now, 
+        status: ReservationStatus.CHECKED_IN 
+      },
       include: reservationInclude,
     });
+
+    // 3. Retorna o registo já atualizado diretamente
+    return updatedReservation;
   }
 
+ //  FAZER CHECK-OUT: Passa a reserva para COMPLETED e liberta o quarto como VACANT_DIRTY (Para limpeza)
   static async checkOut(reservationId: string, earlyCheckoutReason?: string) {
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
@@ -588,7 +599,8 @@ export class ReservationService {
 
     if (!reservation) throw new AppError("Reserva nao encontrada", 404);
     
-    if (["COMPLETED", "CANCELLED", "EXPIRED"].includes(reservation.status)) {
+    // Proteção: Garante que reservas já finalizadas, canceladas ou expiradas não sofrem novo check-out
+    if ([ReservationStatus.COMPLETED, ReservationStatus.CANCELLED, ReservationStatus.EXPIRED].includes(reservation.status)) {
       throw new AppError("Esta reserva já se encontra encerrada", 409);
     }
 
@@ -597,26 +609,37 @@ export class ReservationService {
     let refundAmount = 0;
     let extraCharge = 0;
 
+    // Se o hóspede nunca chegou a fazer check-in real, consideramos um check-out forçado/no-show
     const isForcedCheckout = !reservation.checkInReal;
 
     if (!isForcedCheckout && reservation.checkInReal) {
+      
+      // 1. ENTRA EM CENA A POLÍTICA DE EARLY CHECK-OUT (Saída Antecipada)
+      // Se o cliente está a sair antes da data de check-out agendada e a política prevê reembolso
       if (now < reservation.checkOut && policy.earlyCheckoutRefundPercent > 0) {
         if (!earlyCheckoutReason?.trim()) {
           throw new AppError("Informe o motivo da saida antecipada", 400);
         }
 
+        // Calcula o total de horas contratadas vs horas não utilizadas
         const totalHours =
           (reservation.checkOut.getTime() - reservation.checkIn.getTime()) /
           (1000 * 60 * 60);
         const unusedHours =
           (reservation.checkOut.getTime() - now.getTime()) / (1000 * 60 * 60);
         const unusedValue = (reservation.totalPrice / totalHours) * unusedHours;
+        
+        // Aplica a percentagem de reembolso configurada na política do hotel
         refundAmount = unusedValue * (policy.earlyCheckoutRefundPercent / 100);
       }
 
+  
+      // Adiciona o tempo de tolerância (grace minutes) à hora de check-out prevista
       const graceEnd = new Date(
         reservation.checkOut.getTime() + policy.lateCheckoutGraceMinutes * 60 * 1000
       );
+      
+      // Se o cliente passou da tolerância, cobramos a taxa horária da política
       if (now > graceEnd) {
         const extraHours = Math.ceil(
           (now.getTime() - graceEnd.getTime()) / (1000 * 60 * 60)
@@ -633,13 +656,14 @@ export class ReservationService {
       },
     });
 
+    //  Guarda os cálculos e encerra a reserva como COMPLETED
     const completedReservation = await prisma.reservation.update({
       where: { id: reservationId },
       data: {
-        status: "COMPLETED",
+        status: ReservationStatus.COMPLETED,
         checkOutReal: now,
-        refundAmount,
-        extraCharge,
+        refundAmount: refundAmount > 0 ? refundAmount : null,
+        extraCharge: extraCharge > 0 ? extraCharge : null,
         earlyCheckoutReason: isForcedCheckout 
           ? "Check-out forçado pelo sistema/staff (Hóspede não compareceu ou regularização)."
           : earlyCheckoutReason,
@@ -647,6 +671,7 @@ export class ReservationService {
       include: reservationInclude,
     });
 
+    // Envia o e-mail final para o hóspede com os detalhes e o extrato da estadia
     const email = completedReservation.guest?.email ?? completedReservation.user?.email;
     if (email) {
       try {

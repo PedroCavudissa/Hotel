@@ -8,54 +8,541 @@ export class EmailService {
       pass: process.env.EMAIL_PASS,
     },
   });
+// src/controllers/authController.ts (continuação)
 
-  // 1. Enviar link para Ativação de Conta (VERIFICAÇÃO DE EMAIL)
-  static async sendVerificationEmail(email: string, token: string) {
+static async verifyEmail(req: Request, res: Response) {
+  try {
+    const { token } = req.query;
 
-    const link = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
+    if (!token || typeof token !== 'string') {
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Erro - PEDRO HOTEL</title>
+            <style>
+              body {
+                font-family: 'Georgia', serif;
+                background: linear-gradient(135deg, #001E3D 0%, #002D5A 100%);
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+              }
+              .container {
+                max-width: 500px;
+                margin: 20px;
+                background: white;
+                border-radius: 20px;
+                overflow: hidden;
+                text-align: center;
+              }
+              .header {
+                background: #001E3D;
+                padding: 30px;
+              }
+              .header h1 {
+                color: #D4AF37;
+                margin: 0;
+              }
+              .content {
+                padding: 40px 30px;
+              }
+              .error-icon {
+                width: 80px;
+                height: 80px;
+                background: #ef4444;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 20px;
+              }
+              h2 {
+                color: #dc2626;
+                margin-bottom: 15px;
+              }
+              p {
+                color: #475569;
+                line-height: 1.6;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>PEDRO HOTEL</h1>
+              </div>
+              <div class="content">
+                <div class="error-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="50" height="50" color="white">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <h2>⚠️ Token não fornecido</h2>
+                <p>Link de verificação inválido.</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `);
+    }
 
-    await this.transporter.sendMail({
-      from: `"PEDRO HOTEL" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "Ative a sua Conta - PEDRO HOTEL",
-      html: `
-        <div style="font-family: 'Georgia', serif; max-width: 600px; margin: 0 auto; background: #FAF9F6; border-radius: 16px; overflow: hidden;">
-          <!-- Header -->
-          <div style="background: #001E3D; padding: 30px 20px; text-align: center;">
-            <h1 style="color: #D4AF37; margin: 0; font-size: 28px; letter-spacing: 2px;">PEDRO HOTEL</h1>
-            <p style="color: #94a3b8; margin: 8px 0 0; font-size: 14px;">Luxo & Conforto</p>
-          </div>
-          
-          <!-- Content -->
-          <div style="padding: 40px 30px;">
-            <h2 style="color: #001E3D; margin-top: 0;">Bem-vindo ao PEDRO HOTEL! 🏨</h2>
-            <p style="color: #475569; line-height: 1.6;">Obrigado por se registar. Para ativar a sua conta e começar a fazer reservas, clique no botão abaixo:</p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${link}" 
-                 style="background: #D4AF37; color: #001E3D; padding: 12px 32px; 
-                        text-decoration: none; border-radius: 8px; font-weight: bold;
-                        display: inline-block; font-size: 16px;">
-                Ativar Minha Conta →
+    // Decodificar token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
+      id: string;
+      email: string;
+      role: string;
+      tokenVersion: number;
+    };
+
+    // Buscar usuário
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id }
+    });
+
+    if (!user) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Erro - PEDRO HOTEL</title>
+            <style>
+              body {
+                font-family: 'Georgia', serif;
+                background: linear-gradient(135deg, #001E3D 0%, #002D5A 100%);
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+              }
+              .container {
+                max-width: 500px;
+                margin: 20px;
+                background: white;
+                border-radius: 20px;
+                overflow: hidden;
+                text-align: center;
+              }
+              .header {
+                background: #001E3D;
+                padding: 30px;
+              }
+              .header h1 {
+                color: #D4AF37;
+                margin: 0;
+              }
+              .content {
+                padding: 40px 30px;
+              }
+              h2 {
+                color: #dc2626;
+                margin-bottom: 15px;
+              }
+              p {
+                color: #475569;
+                line-height: 1.6;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>PEDRO HOTEL</h1>
+              </div>
+              <div class="content">
+                <h2>❌ Usuário não encontrado</h2>
+                <p>Não foi possível encontrar sua conta.</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+
+    // Verificar se token já foi usado
+    if (user.tokenVersion !== decoded.tokenVersion) {
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Link Expirado - PEDRO HOTEL</title>
+            <style>
+              body {
+                font-family: 'Georgia', serif;
+                background: linear-gradient(135deg, #001E3D 0%, #002D5A 100%);
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+              }
+              .container {
+                max-width: 500px;
+                margin: 20px;
+                background: white;
+                border-radius: 20px;
+                overflow: hidden;
+                text-align: center;
+              }
+              .header {
+                background: #001E3D;
+                padding: 30px;
+              }
+              .header h1 {
+                color: #D4AF37;
+                margin: 0;
+              }
+              .content {
+                padding: 40px 30px;
+              }
+              .warning-icon {
+                width: 80px;
+                height: 80px;
+                background: #f59e0b;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 20px;
+              }
+              h2 {
+                color: #d97706;
+                margin-bottom: 15px;
+              }
+              p {
+                color: #475569;
+                line-height: 1.6;
+                margin-bottom: 30px;
+              }
+              .button {
+                background: #D4AF37;
+                color: #001E3D;
+                padding: 12px 32px;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: bold;
+                display: inline-block;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>PEDRO HOTEL</h1>
+              </div>
+              <div class="content">
+                <div class="warning-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="50" height="50" color="white">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h2>⚠️ Link já utilizado ou expirado</h2>
+                <p>Este link de verificação já foi usado ou expirou.</p>
+                <a href="${process.env.FRONTEND_URL}/resend-verification" class="button">
+                  Solicitar novo link →
+                </a>
+              </div>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+
+    // Atualizar usuário
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: true,
+        tokenVersion: user.tokenVersion + 1,
+        updatedAt: new Date()
+      }
+    });
+
+    // Retornar página de sucesso
+    return res.status(200).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Email Verificado - PEDRO HOTEL</title>
+          <style>
+            body {
+              font-family: 'Georgia', serif;
+              background: linear-gradient(135deg, #001E3D 0%, #002D5A 100%);
+              margin: 0;
+              padding: 0;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              min-height: 100vh;
+            }
+            .container {
+              max-width: 500px;
+              margin: 20px;
+              background: white;
+              border-radius: 20px;
+              overflow: hidden;
+              box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+              text-align: center;
+            }
+            .header {
+              background: #001E3D;
+              padding: 30px;
+            }
+            .header h1 {
+              color: #D4AF37;
+              margin: 0;
+              font-size: 28px;
+              letter-spacing: 2px;
+            }
+            .content {
+              padding: 40px 30px;
+            }
+            .success-icon {
+              width: 80px;
+              height: 80px;
+              background: #10b981;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              margin: 0 auto 20px;
+              animation: scale 0.5s ease-in-out;
+            }
+            @keyframes scale {
+              0% { transform: scale(0); }
+              100% { transform: scale(1); }
+            }
+            h2 {
+              color: #001E3D;
+              margin-bottom: 15px;
+              font-size: 24px;
+            }
+            p {
+              color: #475569;
+              line-height: 1.6;
+              margin-bottom: 30px;
+            }
+            .button {
+              background: #D4AF37;
+              color: #001E3D;
+              padding: 12px 32px;
+              text-decoration: none;
+              border-radius: 8px;
+              font-weight: bold;
+              display: inline-block;
+              transition: transform 0.2s;
+            }
+            .button:hover {
+              transform: translateY(-2px);
+            }
+            .footer {
+              background: #f8fafc;
+              padding: 20px;
+              font-size: 12px;
+              color: #94a3b8;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>PEDRO HOTEL</h1>
+            </div>
+            <div class="content">
+              <div class="success-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="50" height="50" color="white">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2>✅ Email Verificado!</h2>
+              <p>
+                <strong>Verificação realizada com sucesso!</strong><br />
+                Sua conta está agora ativa e você já pode fazer reservas no PEDRO HOTEL.
+              </p>
+              <a href="${process.env.FRONTEND_URL}/login" class="button">
+                Ir para o Login →
               </a>
             </div>
-            
-            <p style="color: #64748b; font-size: 14px;">Se o botão não funcionar, copie e cole o link abaixo no seu navegador:</p>
-            <p style="background: #f1f5f9; padding: 12px; border-radius: 8px; word-break: break-all; font-size: 12px; color: #3b82f6;">
-              ${link}
-            </p>
-            
-            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 25px 0;" />
-            
-            <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-              Este link expira em 24 horas.<br />
-              Se não foi você que criou esta conta, ignore este email.
-            </p>
+            <div class="footer">
+              <p>PEDRO HOTEL - Luxo & Conforto</p>
+              <p>Você será redirecionado em 5 segundos...</p>
+            </div>
           </div>
-        </div>
-      `,
-    });
+          <script>
+            // Redirecionar para o frontend após 5 segundos
+            setTimeout(() => {
+              window.location.href = '${process.env.FRONTEND_URL}/login';
+            }, 5000);
+          </script>
+        </body>
+      </html>
+    `);
+    
+  } catch (error) {
+    console.error('Erro na verificação de email:', error);
+    
+    if (error instanceof jwt.JsonWebTokenError) {
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Token Inválido - PEDRO HOTEL</title>
+            <style>
+              body {
+                font-family: 'Georgia', serif;
+                background: linear-gradient(135deg, #001E3D 0%, #002D5A 100%);
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+              }
+              .container {
+                max-width: 500px;
+                margin: 20px;
+                background: white;
+                border-radius: 20px;
+                overflow: hidden;
+                text-align: center;
+              }
+              .header {
+                background: #001E3D;
+                padding: 30px;
+              }
+              .header h1 {
+                color: #D4AF37;
+                margin: 0;
+              }
+              .content {
+                padding: 40px 30px;
+              }
+              .error-icon {
+                width: 80px;
+                height: 80px;
+                background: #ef4444;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 20px;
+              }
+              h2 {
+                color: #dc2626;
+                margin-bottom: 15px;
+              }
+              p {
+                color: #475569;
+                line-height: 1.6;
+                margin-bottom: 30px;
+              }
+              .button {
+                background: #D4AF37;
+                color: #001E3D;
+                padding: 12px 32px;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: bold;
+                display: inline-block;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>PEDRO HOTEL</h1>
+              </div>
+              <div class="content">
+                <div class="error-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="50" height="50" color="white">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <h2>❌ Token Inválido</h2>
+                <p>O link de verificação é inválido ou está corrompido.</p>
+                <a href="${process.env.FRONTEND_URL}/resend-verification" class="button">
+                  Solicitar novo link →
+                </a>
+              </div>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+    
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Erro - PEDRO HOTEL</title>
+          <style>
+            body {
+              font-family: 'Georgia', serif;
+              background: linear-gradient(135deg, #001E3D 0%, #002D5A 100%);
+              margin: 0;
+              padding: 0;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              min-height: 100vh;
+            }
+            .container {
+              max-width: 500px;
+              margin: 20px;
+              background: white;
+              border-radius: 20px;
+              overflow: hidden;
+              text-align: center;
+            }
+            .header {
+              background: #001E3D;
+              padding: 30px;
+            }
+            .header h1 {
+              color: #D4AF37;
+              margin: 0;
+            }
+            .content {
+              padding: 40px 30px;
+            }
+            h2 {
+              color: #001E3D;
+              margin-bottom: 15px;
+            }
+            p {
+              color: #475569;
+              line-height: 1.6;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>PEDRO HOTEL</h1>
+            </div>
+            <div class="content">
+              <h2>❌ Erro no Servidor</h2>
+              <p>Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
   }
+}
 
   // 2. Enviar link para Recuperação de Senha (Forgot Password)
   static async sendResetPasswordEmail(email: string, token: string) {

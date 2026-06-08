@@ -1,5 +1,7 @@
-import { prisma } from "../prisma/client.js";
+import { PrismaClient } from "@prisma/client";
 
+// Certifica-se de que a variável se chama exatamente 'prisma' e tem o 'export'
+export const prisma = new PrismaClient();
 type AuthUser = {
   id: string;
   role: string;
